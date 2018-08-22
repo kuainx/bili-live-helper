@@ -247,8 +247,10 @@ function getCookie(name){
         }
         function getSmallTV(room){
             if(window.smallTvRoom[room]===undefined || window.smallTvRoom[room]<new Date().getTime()){
-                window.smallTvRoom[room]=new Date().getTime()+10000;//10s内重复房间不计
-                getSmallTV_init(room);
+                if(Math.random()>0.3){
+                    window.smallTvRoom[room]=new Date().getTime()+10000;//10s内重复房间不计
+                    getSmallTV_init(room);
+                }
             }
         }
         function getSmallTV_init(roomid){
@@ -282,7 +284,7 @@ function getCookie(name){
             });
         }
         function getSmallTV_check(roomid,short_id){
-            window.history.pushState({},0,'https://live.bilibili.com/'+roomid);
+            window.history.pushState({},0,'https://live.bilibili.com/'+short_id);
             $.ajax({
                 type: "get",
                 url: "//api.live.bilibili.com/gift/v3/smalltv/check",
@@ -314,7 +316,7 @@ function getCookie(name){
             });
         }
         function getSmallTV_join(roomid,raffleId,short_id,visit_id){
-            window.history.pushState({},0,'https://live.bilibili.com/'+roomid);
+            window.history.pushState({},0,'https://live.bilibili.com/'+short_id);
             $.ajax({
                     type: "get",
                     url: "//api.live.bilibili.com/gift/v3/smalltv/join",
