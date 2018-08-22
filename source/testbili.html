@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title></title>
+        <script type="text/javascript" charset="utf-8">
+            function draw(){
+                var img =  document.querySelector("img");
+                var ctx = document.querySelector("#a").getContext("2d");
+                ctx.drawImage(img,0,0);
+                var pixels = ctx.getImageData(0,0,120,40).data;
+                //console.log(pixels);
+                var pix = []; //定义一维数组
+                var j = 0;
+                var i=0;
+                var n=0;
+                for(i=1;i<=40;i++)
+                {
+                    pix[i] = []; //将每一个子元素又定义为数组
+                    for(n=1;n<=120;n++)
+                    {
+                        let c = 1;
+                        if(pixels[j]-(-pixels[j + 1])-(- pixels[j + 2]) >200){
+                            c=0;
+                        }
+                        j = j+4;
+                        pix[i][n]=c; //此时pix[i][n]可以看作是一个二级数组
+                        if(pix[i][n]==0){
+                            ctx.clearRect(n,i,1,1);
+                        }else{
+                            ctx.fillRect(n,i,1,1);
+                        }
+                    }
+                }
+                var pix1=pix.concat();
+                var count;
+                var ctx = document.querySelector("#b").getContext("2d");
+                var needbreak=true;
+                    while(needbreak){
+                        needbreak=false;
+                        pix=pix1.concat();
+                        //console.log(1,pix);
+                        pix1=[];
+                        for(i=1;i<=40;i++)
+                        {
+                            pix1[i]=[];
+                            for(n=1;n<=120;n++)
+                            {
+                                pix1[i][n]=0;
+                                if (pix[i][n]==1) {
+                                    count=0;
+                                    //console.log(i);
+                                    if (i>1 && pix[i-1][n]==1) {
+                                        count++;
+                                        //console.log(1,count);
+                                    }
+                                    if (n>1 && pix[i][n-1]==1) {
+                                        count++;
+                                        //console.log(2,count);
+                                    }
+                                    if (i<40 && pix[i+1][n]==1) {
+                                        count++;
+                                        //console.log(3,count);
+                                    }
+                                    if (n<120 && pix[i][n+1]==1) {
+                                        count++;
+                                        //console.log(4,count);
+                                    }
+                                    if (count>=2) {
+                                        pix1[i][n]=1;
+                                    }else{
+                                        needbreak=true;
+                                        //console.log(i,n,count);
+                                    }
+                                }
+                                if(pix1[i][n]==0){
+                                    ctx.clearRect(n,i,1,1);
+                                }else{
+                                    ctx.fillRect(n,i,1,1);
+                                }
+                            }
+                        }
+                    //console.log(pix1);
+                    }
+            }
+        </script>
+    </head>
+    
+    <body>
+        <img src="./3.jpg"><br/>
+        <canvas id="a"></canvas>
+        <canvas id="b"></canvas>
+    </body>
+</html>
