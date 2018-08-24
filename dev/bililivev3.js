@@ -6,6 +6,7 @@
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
 // @include        /^https?:\/\/api\.live\.bilibili\.com\/lottery\/v1\/SilverBox\/getCaptcha.*?/
+// @require      https://greasyfork.org/scripts/44866-ocrad/code/OCRAD.js
 // @grant        none
 // @license            MIT License
 // ==/UserScript==
@@ -28,113 +29,114 @@ function CurentTime(){
     return(clock);
 }
 
- if((window.location.href+"").indexOf("getCaptcha")>10){
-
-
+if((window.location.href+"").indexOf("getCaptcha")>10){
      /****************************************/
      /*--------------验证码回调-------------------------*/
-      window.onload = ls();
-      function ls(){
+    window.onload = ls();
+    function draw(){
+        if(OCRAD){
+        var img = document.querySelector("img");
+        var ctx = document.querySelector("#a");
+        ctx = ctx.getContext("2d");
+        ctx.drawImage(img,0,0);
+        var pixels = ctx.getImageData(0,0,120,40).data;
+        var pix = [];
+        var j=0;
+        for(var i=1;i<=40;i++){
+            pix[i] = [];
+            for(var n=1;n<=120;n++){
+                let c = 0;
+                pixels[j] - (-pixels[j + 1]) - (-pixels[j + 2]) <600 && c++;
+                j = j+4;
+                pix[i][n]=c;
+            }
+        }
+        ctx.fillStyle = `rgb(255, 255,255)`;
+        ctx.fillRect(0,0,120,40);
+        ctx.fillStyle = `rgb(0, 0,0)`;
+        function gp(i,n){
+            if(i<1 || n<1 || n>120 || i>40){
+                return 0;
+            }else{
+                return pix[i][n];
+            }
+        }
+        var count;
+        for(var i=1;i<=40;i++){
+            for(var n=1;n<=120;n++){
+                count=0;
+                gp(i-1,n-1)==1 && count++;
+                gp(i-1,n  )==1 && count++;
+                gp(i-1,n+1)==1 && count++;
+                gp(i  ,n-1)==1 && count++;
+                gp(i  ,n  )==1 && count++;
+                gp(i  ,n+1)==1 && count++;
+                gp(i+1,n-1)==1 && count++;
+                gp(i+1,n  )==1 && count++;
+                gp(i+1,n+1)==1 && count++;
+                count==9 && ctx.fillRect(n-1,i-1,1,1);
+            }
+        }
+        var result = OCRAD(ctx.getImageData(0,0,120,40));
+        var origin = result;
+        var correctStr = {
+            'g': 9,
+            'z': 2,
+            'Z': 2,
+            'o': 0,
+            'l': 1,
+            'B': 8,
+            'O': 0,
+            'S': 6,
+            's': 6,
+            'i': 1,
+            'I': 1,
+            '[\.]': '-',
+            '_': 4,
+            'b': 6,
+            'R': 8,
+            '[\|]': 1,
+            'D': 0,
+            '>': 7,
+            'C': 4,
+            'T': 3,
+            'r': '+'
+        };
+        Object.keys(correctStr).forEach(key => {
+            let reg=new RegExp(key,"g");
+            result = result.replace(reg,correctStr[key]);
+            console.log("OCRAD",result);
+        });
+        console.log("OCRAD",origin,result);
+        return result;
+        }else{
+            console.error("ERROR",CurentTime(),"OCRAD","failed");
+            return '';
+        }
+    }
+    function ls(){
+        var js = document.createElement("script");
+        js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
+        document.body.insertBefore(js,document.body.firstChild);
+        document.body.style="background-color:#66ccff";
         var canvas = document.createElement("canvas");
-        document.querySelector("body").appendChild(canvas);
+        canvas.id="a";
+        document.body.insertBefore(canvas,document.body.firstChild);
+        var div = document.createElement("div");
+        div.id="b";
+        document.body.insertBefore(div,document.body.firstChild);
         var image = document.createElement("img");
         var ret=JSON.parse(document.querySelector("pre").innerHTML);
-//        console.log(ret);
-        image.src=ret['data']['img'];
+        image.src=ret.data.img;
+        image.onload=function(){
+            var result=draw();
+            document.domain='bilibili.com';
+            window.parent.h5alert("");
+            document.getElementById("b").innerHTML='<input id="input" value="'+result+'" onkeypress="if(event.keyCode==13){try{if(window.parent.valid && typeof(window.parent.valid)==\'function\'){window.parent.valid(eval(document.getElementById(\'input\').value));}else{console.log(CurentTime()+\'回调失败，请反馈\');}}catch(e){};return false;}"/>';
+            
+        };
         document.body.insertBefore(image,document.body.firstChild);
-        document.domain='bilibili.com';
-        window.parent.h5alert("");
-        document.body.innerHTML='<input id="input" onkeypress="if(event.keyCode==13){try{if(window.parent.valid && typeof(window.parent.valid)==\'function\'){window.parent.valid(eval(document.getElementById(\'input\').value));}else{console.log(CurentTime()+\'回调失败，请反馈\');}}catch(e){};return false;}"/><audio id="msg" preload="metadata" src="https://wx.qq.com/zh_CN/htmledition/v2/sound/msg.mp3"></audio>'+document.body.innerHTML;
-        document.getElementById("msg").play();
-
-//         setTimeout(function(){
-//          function get_word(a){
-//              if(a.total<=50) return "-";
-//              if(a.total>120&&a.total<135) return "+";
-//              if(a.total>155&&a.total<162) return 1;
-//              if(a.total>189&&a.total<195) return 7;
-//              if(a.total>228&&a.total<237) return 4;
-//              if(a.total>250&&a.total<260) return 2;
-//              if(a.total>286&&a.total<296) return 3;
-//              if(a.total>303&&a.total<313) return 5;
-//              if(a.total>335&&a.total<342) return 8;
-//              if(a.total>343&&a.total<350){
-//                  if(a.fi>24&&a.la>24) return 0;
-//                  if(a.fi<24&&a.la>24) return 9;
-//                  if(a.fi>24&&a.la<24) return 6;
-//              }
-//          }
-//           var img =  document.querySelector("img");
-//         var ctx = document.querySelector("canvas").getContext("2d");
-//         ctx.drawImage(img,0,0);
-//          var pixels = ctx.getImageData(0,0,120,40).data;
-//          document.domain='bilibili.com';
-
-// //         console.log(pixels);
-//             var pix = []; //定义一维数组
-//             var j = 0;
-//             var i=0;
-//             var n=0;
-//             for(i=1;i<=40;i++)
-//             {
-//                 pix[i] = []; //将每一个子元素又定义为数组
-//                 for(n=1;n<=120;n++)
-//                 {
-//                     let c = 1;
-//                     if(pixels[j]-(-pixels[j + 1])-(- pixels[j + 2]) >200){
-//                         c=0;
-//                     }
-//                     j = j+4;
-//                     pix[i][n]=c; //此时pix[i][n]可以看作是一个二级数组
-//                 }
-//             }
-//             //我们得到了二值化后的像素矩阵pix[40][120]
-// //             console.log(pix);
-//             var lie = [];
-//             lie[0]=0;
-//             for(i=1;i<=120;i++){
-//                 lie[i] = 0;
-//                 for(n=1;n<=40;n++){
-//                     lie[i] = lie[i]+pix[n][i];
-//                 }
-//             }
-//             var ta = [];
-//             n=0;
-//             for(i=1;i<=120;i++){
-//                 if(lie[i]>0&&lie[i-1]===0){
-//                     n++;
-//                     ta[n] ={};
-//                     ta[n].fi = lie[i];
-//                     ta[n].total = 0;
-//                 }
-//                 if(lie[i]>0){
-//                     ta[n].total = ta[n].total+lie[i];
-//                 }
-//                 if(lie[i-1]>0&&lie[i]===0){
-//                     ta[n].la = lie[i-1];
-//                 }
-//             }
-//             console.log(get_word(ta[1])+" "+get_word(ta[2])+" "+get_word(ta[3])+" "+get_word(ta[4]));
-//             var val_a = 0;
-//             var val_b = 0;
-//             var result = 0;
-//             val_a = get_word(ta[1])*10-(-get_word(ta[2]));
-//             val_b = get_word(ta[4]);
-//             if(get_word(ta[3])=="+"){
-//                 result = val_a-(-val_b);
-//             }else{
-//                 result = val_a-val_b;
-//             }
-            //     try{
-            //      if(window.parent.valid&&typeof(window.parent.valid)=="function"){
-            //          window.parent.valid(result);
-            //      }else{
-            //          console.log(CurentTime()+"回调失败，请反馈");
-            //      }
-            //  }catch(e){
-            //  }
-//       },5000)
-    };
+    }
 
 
 
@@ -148,10 +150,7 @@ function CurentTime(){
 
 
      /***********新直播间************/
-
-
-
-     (function($) {
+    (function($) {
     $.fn.dragDiv = function(options) {
         return this.each(function() {
             var _moveDiv = $(this);//需要拖动的Div
@@ -214,22 +213,10 @@ function getCookie(name){
 
         /****************************************************************/
         /*----------------------小电视-------------------------------------*/
-
         function Listener_smalltv(){
             msg("自动领低保已启动");
             console.log("smallTvListener","监听启动");
             window.smallTvRoom=[];
-            function showHelp(){
-                $("body").append('<style>#helper_help{width:100%;height:100%;top:0;left:0;position:fixed;z-index:999999;background-color:rgba(0,0,0,.4);overflow:hidden;word-break:break-all}.helper_lisences{background-color:#555;box-shadow:0 0 15px #111;margin-left:20%;margin-top:10px;width:60%;font-size:18px;color:#fff;border-radius:5px;border:1px solid #fff;padding:5px 10px}</style><div id="helper_help"><div class="helper_lisences"><p><em>当你看到该提示，说明你的脚本是第一次启动或在最近发生了更新，请阅读以下说明 (5秒后可点击空白处关闭)</em></p><h4>使用须知：</h4><ul><li>请勿宣传，闷声发财</li><li>使用本脚本而导致的一切后果由你本人承担</li><li>MIT协议，在任何情况下对本脚本进行二次开发均需在UI中注明版权</li></ul><h4>功能简介：</h4><ul><li>单击进度条白色部分：查看宝箱领取进度</li><li>双击进度条灰色部分：查看低保领取情况</li><li>右键单击进度条，拖动绿色提示：更改脚本提示信息的位置</li></ul><h4>注意事项：（重要）</h4><ul><li>兼容：FireFox/Chrome + Tampermonkey 。其他兼容性问题概不负责</li><li>已知与助手不兼容</li><li>仅保留最后一个直播间的脚本生效，回到原直播间的话，请刷新</li><li>进度条显示在视频下方，自动领瓜子开始时将自动隐藏宝箱</li><li>领低保功能存在延迟（20秒），有失败的可能性，非脚本问题</li><li>长时间挂机有可能导致网站检测离线，脚本工作不正常，非脚本问题</li><li>本脚本由mscststs的bililive脚本二开而成</li><li>showHelp可再次打开本帮助</li></ul></div></div>');
-                    setTimeout(function(){
-                        window.localStorage["helper_help"] = "3.00";
-                        $("#helper_help").css("background-color","none");
-                        $("#helper_help").click(function(){
-                            $("#helper_help").fadeOut(function(){$(this).remove();});
-                        });
-    
-                    },5000);
-            }
             $(document).on("DOMNodeInserted",".small-tv",function(){
                 var text = $(this).context.childNodes[1].children[0].href;
                 console.log($(this).context.childNodes[1].children[0].href);
@@ -247,10 +234,14 @@ function getCookie(name){
         }
         function getSmallTV(room){
             if(window.smallTvRoom[room]===undefined || window.smallTvRoom[room]<new Date().getTime()){
-                if(Math.random()>0.3){
+                if(Math.random()>0.4){
                     window.smallTvRoom[room]=new Date().getTime()+10000;//10s内重复房间不计
                     getSmallTV_init(room);
+                }else{
+                    console.log("SmallTv","战略性释放"+room);
                 }
+            }else{
+                console.log("SmallTv","过于频繁不加载"+room);
             }
         }
         function getSmallTV_init(roomid){
@@ -305,12 +296,12 @@ function getCookie(name){
                             if(data.data.list[i].status==1)
                             getSmallTV_join(roomid,raffleId,short_id,visitId);
                         }
-                         if(i==0){
+                        if(i==0){
                             msg("在查找小电视的时候失败，是不是网速太慢了？","caution",5000);
                         }
                     }else{
                         msg("在查找小电视的时候出错","caution",5000);
-                        console.error("ERROR","smallTvCheck",data);
+                        console.error("ERROR",CurentTime(),"smallTvCheck",data);
                     }
                 }
             });
@@ -345,7 +336,7 @@ function getCookie(name){
                             },restime);
                         }else{
                             msg("参加小电视抽奖失败了 (´･_･`)","caution",5000);
-                            console.error("ERRROR","smallTvJoin",data);
+                            console.error("ERRROR",CurentTime(),"smallTvJoin",data);
                         }
                     }
                 });
@@ -382,7 +373,7 @@ function getCookie(name){
                                 },60000);
                             }else{
                                 msg("获取中奖信息时出错！","caution",5000);
-                                console.log(data);
+                                console.error("ERROR",CurentTime(),"smallTvNotice",data);
                             }
                         }
                     }
@@ -472,7 +463,8 @@ function getCookie(name){
             }else{
                 console.log('Sign',date+"用户已经签到过");
             }
-            if(localStorage.livejs_GroupSign!=date){
+            var yestoday = new Date(new Date().setDate(new Date().getDate()-1)).toLocaleDateString();
+            if(localStorage.livejs_GroupSign!=date && (localStorage.livejs_GroupSign!=yestoday || new Date().getHours()>6)){//6点前不得签到
                 setTimeout(function(){
                     groupListGet();
                 },20000);
@@ -486,6 +478,13 @@ function getCookie(name){
             }else{
                 console.log('Grouplist',date+"DoubleWatch任务完成");
             }
+            var js = document.createElement("script");
+            js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
+            document.body.insertBefore(js,document.body.firstChild);
+            var audio = document.createElement("audio");
+            audio.id="msg";
+            audio.src="https://wx.qq.com/zh_CN/htmledition/v2/sound/msg.mp3";
+            document.body.insertBefore(audio,document.body.firstChild);
         }
         
         function mobileHeartBeat(){
@@ -515,7 +514,7 @@ function getCookie(name){
                     withCredentials: true
                 },
                 success: function (data) {
-                    if(data.data.double_watch_info.status===0){
+                    if(data.data.double_watch_info.status===0 || data.data.double_watch_info.status===1){
                         if(data.data.double_watch_info.progress.now==2){
                             setTimeout(function(){
                                 dobuleWatchTaskDo();
@@ -574,7 +573,7 @@ function getCookie(name){
                                 signDo();
                             },10000);
                         }else{
-                            console.log("Sign","签到过了，status:"+data.data.status+"获得"+data.data.text+data.data.specialText);
+                            console.log("SignGet","签到过了，status:"+data.data.status+"获得"+data.data.text+data.data.specialText);
                             localStorage.livejs_Sign=new Date().toLocaleDateString();
                         }
                     }else{
@@ -595,10 +594,13 @@ function getCookie(name){
                 success: function (data) {
                     //console.log('sign',data);
                     if(data.code===0){
-                        console.log("Sign","签到成功，"+data.data.text);
-                    }else if(data.code===-500){
-                        console.log("Sign","今天已签到过了");
+                        console.log("SignDo","签到成功，"+data.data.text);
                         localStorage.livejs_Sign=new Date().toLocaleDateString();
+                    }else if(data.code===-500){
+                        console.log("SignDo","今天已签到过了");
+                        localStorage.livejs_Sign=new Date().toLocaleDateString();
+                    }else{
+                        console.error("ERROR","SignDo",data)
                     }
                 }
             });
@@ -810,7 +812,6 @@ function getCookie(name){
                     }
                 });
         }
-
         window.valid = function(valid){
             console.log(CurentTime()+"尝试回调成功，可以获取"+valid);
             var ntime = getSeconds();
@@ -836,7 +837,7 @@ function getCookie(name){
                     }
                 });
         };
-    window.h5alert = function(h5alert){
+    window.h5alert = function(){
        if (window.Notification){
             if (window.Notification.permission == "granted") {
                 var noti = new Notification('FreeSilverGET', {
@@ -851,6 +852,7 @@ function getCookie(name){
                 window.Notification.requestPermission();
             }
         }
+        document.getElementById("msg").play();
     };
     });
 

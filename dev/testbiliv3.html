@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <title></title>
+        <script src="./OCRAD.js" type="text/javascript" charset="utf-8"></script>
+        <script type="text/javascript" charset="utf-8">
+            function draw(){
+                var img =  document.querySelector("img");
+                var ctx = document.querySelector("#a").getContext("2d");
+                ctx.drawImage(img,0,0);
+                var pixels = ctx.getImageData(0,0,120,40).data;
+                var pix = [];
+                var j=0;
+                for(var i=1;i<=40;i++){
+                    pix[i] = [];
+                    for(var n=1;n<=120;n++){
+                        let c = 0;
+                        pixels[j] - (-pixels[j + 1]) - (-pixels[j + 2]) <600 && c++;
+                        j = j+4;
+                        pix[i][n]=c;
+                    }
+                }
+                ctx.fillStyle = `rgb(255, 255,255)`;
+                ctx.fillRect(0,0,120,40);
+                ctx.fillStyle = `rgb(0, 0,0)`;
+                function gp(i,n){
+                    if(i<1 || n<1 || n>120 || i>40){
+                        return 0;
+                    }else{
+                        return pix[i][n];
+                    }
+                }
+                var count;
+                for(var i=1;i<=40;i++){
+                    for(var n=1;n<=120;n++){
+                        count=0;
+                        gp(i-1,n-1)==1 && count++;
+                        gp(i-1,n  )==1 && count++;
+                        gp(i-1,n+1)==1 && count++;
+                        gp(i  ,n-1)==1 && count++;
+                        gp(i  ,n  )==1 && count++;
+                        gp(i  ,n+1)==1 && count++;
+                        gp(i+1,n-1)==1 && count++;
+                        gp(i+1,n  )==1 && count++;
+                        gp(i+1,n+1)==1 && count++;
+                        count==9 && ctx.fillRect(n-1,i-1,1,1);
+                    }
+                }
+                var result = OCRAD(ctx.getImageData(0,0,120,40));
+                var correctStr = {
+                    'g': 9,
+                    'z': 2,
+                    'Z': 2,
+                    'o': 0,
+                    'l': 1,
+                    'B': 8,
+                    'O': 0,
+                    'S': 6,
+                    's': 6,
+                    'i': 1,
+                    'I': 1,
+                    '.': '-',
+                    '_': 4,
+                    'b': 6,
+                    'R': 8,
+                    '|': 1,
+                    'D': 0,
+                    '>': 3
+                }
+                Object.keys(correctStr).forEach(key => {
+                    result = result.replace(key,correctStr[key]);
+                })
+                return result;
+            }
+            
+                    
+                    
+        </script>
+    </head>
+    
+    <body style="background-color:#66ccff">
+        <img src="./1.jpg"><br/>
+        <canvas id="a"></canvas>
+        <canvas id="b"></canvas>
+    </body>
+</html>

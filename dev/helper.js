@@ -1657,6 +1657,7 @@
                 // 1.将correctStr声明在correctQuestion函数内部，并修改相关引用
                 // 2.在correctStr中增加'>': 3
                 correctStr: {
+                    '/[\n]/g':'',//去除空行
                     'g': 9,
                     'z': 2,
                     'Z': 2,
