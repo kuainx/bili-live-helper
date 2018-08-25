@@ -100,7 +100,11 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             '>': 7,
             'C': 4,
             'T': 3,
-            'r': '+'
+            'r': '+',
+            'q': 9,
+            'L': 2,
+            'G': 4,
+            'c': 4
         };
         Object.keys(correctStr).forEach(key => {
             let reg=new RegExp(key,"g");
