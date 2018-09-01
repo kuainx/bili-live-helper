@@ -222,23 +222,23 @@ function getCookie(name){
             console.log("smallTvListener","监听启动");
             window.smallTvRoom=[];
             $(document).on("DOMNodeInserted",".small-tv",function(){
-                var text = $(this).context.childNodes[1].children[0].href;
-                console.log($(this).context.childNodes[1].children[0].href);
-                var m = text.match('m/(.*)');
                 if(window.localStorage.id!=window.helper_id ){
                     close();
                     getSmallTV_close();
                     msg("在其他房间打开了","caution");
                     return;
                 }//判断是否在其他房间打开了
-                var delay = (parseInt(Math.random()*20)+1)*1000;//随机20秒以内延迟
+                var text = $(this).context.childNodes[1].children[0].href;
+                console.log($(this).context.childNodes[1].children[0].href);
+                var m = text.match('m/(.*)');
+                var delay = (parseInt(Math.random()*10))*1000+10;//随机10-20秒以内延迟
                 setTimeout(function(){getSmallTV(m[1]);},delay);
             });
             
         }
         function getSmallTV(room){
             if(window.smallTvRoom[room]===undefined || window.smallTvRoom[room]<new Date().getTime()){
-                if(Math.random()>0.4){
+                if(Math.random()>0.3){
                     window.smallTvRoom[room]=new Date().getTime()+10000;//10s内重复房间不计
                     getSmallTV_init(room);
                 }else{
@@ -294,11 +294,15 @@ function getCookie(name){
                 success: function (data) {
                     if(data.code==0){
                         var i=0;
+                        var delay = (parseInt(Math.random()))*1000+1;//随机1-2秒以内延迟
                         for(i=0;i<data.data.list.length;i++){
                             var raffleId = data.data.list[i].raffleId;
                             var visitId = ((new Date).getTime() * Math.ceil(1e6 * Math.random())).toString(36);
-                            if(data.data.list[i].status==1)
-                            getSmallTV_join(roomid,raffleId,short_id,visitId);
+                            if(data.data.list[i].status==1){
+                                setTimeout(function(){
+                                    getSmallTV_join(roomid,raffleId,short_id,visitId);
+                                },delay*(i+1));
+                            }
                         }
                         if(i==0){
                             msg("在查找小电视的时候失败，是不是网速太慢了？","caution",5000);
@@ -453,7 +457,6 @@ function getCookie(name){
             setTimeout(function(){
                  if(isExist()){
                     msg("自动领瓜子已启动");
-                    // $("#link-navbar-vm > nav > div > div.right-part.h-100.f-right.f-clear > div.shortcuts-ctnr.h-100.f-left > ul > li:nth-child(1) > div > div > div > div > div.calendar-wrapper > div.checkin-btn.t-center").click();//签到
                     start();
                 }else{
                     msg("没有瓜子哦","caution");
@@ -480,7 +483,7 @@ function getCookie(name){
                     doubleWatchTaskCheck();
                 },25000);
             }else{
-                console.log('Grouplist',date+"DoubleWatch任务完成");
+                console.log('DoubleWatch',date+"DoubleWatch任务完成");
             }
             var js = document.createElement("script");
             js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
