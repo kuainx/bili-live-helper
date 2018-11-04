@@ -5,8 +5,7 @@
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
-// @include        /^https?:\/\/api\.live\.bilibili\.com\/lottery\/v1\/SilverBox\/getCaptcha.*?/
-// @require      https://greasyfork.org/scripts/44866-ocrad/code/OCRAD.js
+// @include        /^https?:\/\/api\.live\.bilibili\.com\/link_group\/v1\/member\/my_groups/
 // @grant        none
 // @license            MIT License
 // ==/UserScript==
@@ -104,7 +103,9 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             'q': 9,
             'L': 2,
             'G': 4,
-            'c': 4
+            'c': 4,
+            't': 1,
+            'a': 8
         };
         Object.keys(correctStr).forEach(key => {
             let reg=new RegExp(key,"g");
@@ -145,6 +146,53 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
 
 
 
+    }else if((window.location.href+"").indexOf("my_groups")>10){
+        window.GroupSign = function (group_id,owner_id,medal){
+            $.ajax({
+                type: "get",
+                url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
+                data: {
+                    group_id: group_id,
+                    owner_id: owner_id
+                },
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    //console.log(data);
+                    if(data.code===0){
+                        if(data.data.status===0){
+                            console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
+                        }else{
+                            console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
+                        }
+                    }else{
+                        console.error("ERROR",'GroupSign',data);
+                    }
+                }
+            });
+        };
+        document.domain='bilibili.com';
+        var js = document.createElement("script");
+        js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
+        document.body.insertBefore(js,document.body.firstChild);
+        var data =JSON.parse(document.querySelector("pre").innerHTML);
+        if(data.code===0){
+            var Grouplist=data.data.list;
+            Grouplist.forEach(function(val,index){
+                var delay = (parseInt(Math.random()*5)+1)*1000;
+                setTimeout(function(){
+                    GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+                },delay*(index+1));
+            });
+            parent.localStorage.livejs_GroupSign=new Date().toLocaleDateString();
+        }else{
+            console.log("ERROR",'Grouplist',data);
+        }
+        parent.document.querySelector("iframe").style.display="none";
+        
     }else{
 
 
@@ -221,16 +269,16 @@ function getCookie(name){
             msg("自动领低保已启动");
             console.log("smallTvListener","监听启动");
             window.smallTvRoom=[];
-            $(document).on("DOMNodeInserted",".small-tv",function(){
+            $(document).on("DOMNodeInserted",".system-msg",function(){
                 if(window.localStorage.id!=window.helper_id ){
                     close();
                     getSmallTV_close();
                     msg("在其他房间打开了","caution");
                     return;
                 }//判断是否在其他房间打开了
-                var text = $(this).context.childNodes[1].children[0].href;
-                console.log($(this).context.childNodes[1].children[0].href);
-                var m = text.match('m/(.*)');
+                var text = $(this).context.childNodes[3].children[0].href;
+                console.log(text);
+                var m = text.match('m/([0-9]*)');
                 var delay = (parseInt(Math.random()*10))*1000+10;//随机10-20秒以内延迟
                 setTimeout(function(){getSmallTV(m[1]);},delay);
             });
@@ -342,6 +390,11 @@ function getCookie(name){
                             setTimeout(function(){
                                 getSmallTV_notice(roomid,raffleId,short_id,giftType);
                             },restime);
+                        }else if(data.code===400){
+                            close();
+                            getSmallTV_close();
+                            msg("被禁止访问","caution",5000);
+                            console.error("ERRROR","关闭脚本",CurentTime(),"smallTvJoin",data);
                         }else{
                             msg("参加小电视抽奖失败了 (´･_･`)","caution",5000);
                             console.error("ERRROR",CurentTime(),"smallTvJoin",data);
@@ -488,6 +541,9 @@ function getCookie(name){
             var js = document.createElement("script");
             js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
             document.body.insertBefore(js,document.body.firstChild);
+            js = document.createElement("script");
+            js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
+            document.body.insertBefore(js,document.body.firstChild);
             var audio = document.createElement("audio");
             audio.id="msg";
             audio.src="https://wx.qq.com/zh_CN/htmledition/v2/sound/msg.mp3";
@@ -613,57 +669,72 @@ function getCookie(name){
             });
         }
         function groupListGet(){
-            $.ajax({
-                type: "get",
-                url: "//api.live.bilibili.com/link_group/v1/member/my_groups",
-                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                crossDomain:true,
-                xhrFields: {
-                    withCredentials: true
-                },
-                success: function (data) {
-                    //console.log('GroupSign',data);
-                    if(data.code===0){
-                        var Grouplist=data.data.list;
-                        Grouplist.forEach(function(val,index){
-                            var delay = (parseInt(Math.random()*5)+1)*1000;
-                            setTimeout(function(){
-                                GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
-                            },delay*(index+1));
-                        });
-                        localStorage.livejs_GroupSign=new Date().toLocaleDateString();
-                    }else{
-                        console.log("ERROR",'Grouplist',data);
-                    }
+            // $.ajax({
+            //     type: "get",
+            //     url: "//api.live.bilibili.com/link_group/v1/member/my_groups",
+            //     datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+            //     crossDomain:true,
+            //     xhrFields: {
+            //         withCredentials: true
+            //     },
+            //     success: function (data) {
+            //         //console.log('GroupSign',data);
+            //         if(data.code===0){
+            //             var Grouplist=data.data.list;
+            //             Grouplist.forEach(function(val,index){
+            //                 var delay = (parseInt(Math.random()*5)+1)*1000;
+            //                 setTimeout(function(){
+            //                     GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+            //                 },delay*(index+1));
+            //             });
+            //             localStorage.livejs_GroupSign=new Date().toLocaleDateString();
+            //         }else{
+            //             console.log("ERROR",'Grouplist',data);
+            //         }
+            //     }
+            // });
+            $("body").append("<iframe class='helper_none' src='https://api.live.bilibili.com/link_group/v1/member/my_groups'></iframe>");
+            window.groupListGetDeal=function(data){
+                if(data.code===0){
+                    var Grouplist=data.data.list;
+                    Grouplist.forEach(function(val,index){
+                        var delay = (parseInt(Math.random()*5)+1)*1000;
+                        setTimeout(function(){
+                            GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+                        },delay*(index+1));
+                    });
+                    localStorage.livejs_GroupSign=new Date().toLocaleDateString();
+                }else{
+                    console.log("ERROR",'Grouplist',data);
                 }
-            });
+            };
         }
         function GroupSign(group_id,owner_id,medal){
-            $.ajax({
-                type: "get",
-                url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
-                data: {
-                    group_id: group_id,
-                    owner_id: owner_id
-                },
-                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                crossDomain:true,
-                xhrFields: {
-                    withCredentials: true
-                },
-                success: function (data) {
-                    //console.log(data);
-                    if(data.code===0){
-                        if(data.data.status===0){
-                            console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
-                        }else{
-                            console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
-                        }
-                    }else{
-                        console.error("ERROR",'GroupSign',data);
-                    }
-                }
-            });
+            // $.ajax({
+            //     type: "get",
+            //     url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
+            //     data: {
+            //         group_id: group_id,
+            //         owner_id: owner_id
+            //     },
+            //     datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+            //     crossDomain:true,
+            //     xhrFields: {
+            //         withCredentials: true
+            //     },
+            //     success: function (data) {
+            //         //console.log(data);
+            //         if(data.code===0){
+            //             if(data.data.status===0){
+            //                 console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
+            //             }else{
+            //                 console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
+            //             }
+            //         }else{
+            //             console.error("ERROR",'GroupSign',data);
+            //         }
+            //     }
+            // });
         }
         function start(){
             $("#helper_progress").click(function(){
