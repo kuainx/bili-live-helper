@@ -6,6 +6,7 @@
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
 // @include        /^https?:\/\/api\.live\.bilibili\.com\/link_group\/v1\/member\/my_groups/
+// @include        /^https?:\/\/api\.live\.bilibili\.com\/lottery\/v1\/SilverBox\/getCaptcha.*?/
 // @grant        none
 // @license            MIT License
 // ==/UserScript==
@@ -29,11 +30,7 @@ function CurentTime(){
 }
 
 if((window.location.href+"").indexOf("getCaptcha")>10){
-     /****************************************/
-     /*--------------验证码回调-------------------------*/
-    window.onload = ls();
-    function draw(){
-        if(OCRAD){
+    window.draw = function (){
         var img = document.querySelector("img");
         var ctx = document.querySelector("#a");
         ctx = ctx.getContext("2d");
@@ -114,12 +111,8 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         });
         console.log("OCRAD",origin,result);
         return result;
-        }else{
-            console.error("ERROR",CurentTime(),"OCRAD","failed");
-            return '';
-        }
-    }
-    function ls(){
+    };
+    window.ls = function (){
         var js = document.createElement("script");
         js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
         document.body.insertBefore(js,document.body.firstChild);
@@ -134,15 +127,16 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         var ret=JSON.parse(document.querySelector("pre").innerHTML);
         image.src=ret.data.img;
         image.onload=function(){
-            var result=draw();
-            document.domain='bilibili.com';
-            window.parent.h5alert("");
-            document.getElementById("b").innerHTML='<input id="input" value="'+result+'" onkeypress="if(event.keyCode==13){try{if(window.parent.valid && typeof(window.parent.valid)==\'function\'){window.parent.valid(eval(document.getElementById(\'input\').value));}else{console.log(CurentTime()+\'回调失败，请反馈\');}}catch(e){};return false;}"/>';
-            
+            setTimeout(function(){
+                var result=draw();
+                document.domain='bilibili.com';
+                window.parent.h5alert("");
+                document.getElementById("b").innerHTML='<input id="input" value="'+result+'" onkeypress="if(event.keyCode==13){try{if(window.parent.valid && typeof(window.parent.valid)==\'function\'){window.parent.valid(eval(document.getElementById(\'input\').value));}else{console.log(CurentTime()+\'回调失败，请反馈\');}}catch(e){};return false;}"/>';
+            },2000);
         };
         document.body.insertBefore(image,document.body.firstChild);
-    }
-
+    };
+    window.onload = ls;
 
 
 
@@ -191,7 +185,7 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         }else{
             console.log("ERROR",'Grouplist',data);
         }
-        parent.document.querySelector("iframe").style.display="none";
+        parent.document.querySelector(".helper_none").style.display="none";
         
     }else{
 
@@ -541,9 +535,9 @@ function getCookie(name){
             var js = document.createElement("script");
             js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
             document.body.insertBefore(js,document.body.firstChild);
-            js = document.createElement("script");
-            js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
-            document.body.insertBefore(js,document.body.firstChild);
+            // js = document.createElement("script");
+            // js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
+            // document.body.insertBefore(js,document.body.firstChild);
             var audio = document.createElement("audio");
             audio.id="msg";
             audio.src="https://wx.qq.com/zh_CN/htmledition/v2/sound/msg.mp3";
