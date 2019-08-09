@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BilibiliAPI
 // @namespace    SeaLoong
-// @version      1.3.1
+// @version      1.4.3
 // @description  BilibiliAPI，PC端抓包研究所得
 // @author       SeaLoong
 // @require      http://code.jquery.com/jquery-3.3.1.min.js
@@ -9,7 +9,13 @@
 // @license      MIT License
 // ==/UserScript==
 
+let csrf_token, visit_id;
+
 var BilibiliAPI = {
+    setCommonArgs: (csrfToken = '', visitId = '') => {
+        csrf_token = csrfToken;
+        visit_id = visitId;
+    },
     // 整合常用API
     TreasureBox: {
         getAward: (time_start, end_time, captcha) => BilibiliAPI.lottery.SilverBox.getAward(time_start, end_time, captcha),
@@ -17,8 +23,8 @@ var BilibiliAPI = {
         getCurrentTask: () => BilibiliAPI.lottery.SilverBox.getCurrentTask()
     },
     Exchange: {
-        coin2silver: (num, csrf_token, platform) => BilibiliAPI.pay.coin2silver(num, csrf_token, platform),
-        silver2coin: (csrf_token, platform) => BilibiliAPI.pay.silver2coin(csrf_token, platform),
+        coin2silver: (num, platform) => BilibiliAPI.pay.coin2silver(num, platform),
+        silver2coin: (platform) => BilibiliAPI.pay.silver2coin(platform),
         old: {
             coin2silver: (coin) => BilibiliAPI.exchange.coin2silver(coin),
             silver2coin: () => BilibiliAPI.exchange.silver2coin()
@@ -26,9 +32,9 @@ var BilibiliAPI = {
     },
     Lottery: {
         Gift: {
-            check: (roomid) => BilibiliAPI.gift.smalltv.check(roomid),
-            join: (roomid, raffleId, csrf_token, visit_id, type) => BilibiliAPI.gift.smalltv.join(roomid, raffleId, csrf_token, visit_id, type),
-            notice: (raffleId, type) => BilibiliAPI.gift.smalltv.notice(raffleId, type)
+            check: (roomid) => BilibiliAPI.xlive.smalltv.check(roomid),
+            join: (roomid, raffleId, type) => BilibiliAPI.xlive.smalltv.join(roomid, raffleId, type),
+            notice: (raffleId, type) => BilibiliAPI.xlive.smalltv.notice(raffleId, type)
         },
         Raffle: {
             check: (roomid) => BilibiliAPI.activity.check(roomid),
@@ -42,8 +48,8 @@ var BilibiliAPI = {
             getWinnerGroupInfo: (aid, number) => BilibiliAPI.lottery.box.getWinnerGroupInfo(aid, number)
         },
         Guard: {
-            check: (roomid) => BilibiliAPI.lottery.lottery.check(roomid),
-            join: (roomid, id, csrf_token) => BilibiliAPI.lottery.lottery.join(roomid, id, csrf_token)
+            check: (roomid) => BilibiliAPI.lottery.lottery.check_guard(roomid),
+            join: (roomid, id, type) => BilibiliAPI.lottery.lottery.join(roomid, id, type)
         }
     },
     Group: {
@@ -52,46 +58,58 @@ var BilibiliAPI = {
     },
     Storm: {
         check: (roomid) => BilibiliAPI.lottery.Storm.check(roomid),
-        join: (id, captcha_token, captcha_phrase, csrf_token, visit_id, color) => BilibiliAPI.lottery.Storm.join(id, captcha_token, captcha_phrase, csrf_token, visit_id, color)
+        join: (id, captcha_token, captcha_phrase, roomid, color) => BilibiliAPI.lottery.Storm.join(id, captcha_token, captcha_phrase, roomid, color)
     },
     HeartBeat: {
         web: () => BilibiliAPI.user.userOnlineHeart(),
         mobile: () => BilibiliAPI.mobile.userOnlineHeart()
     },
     DailyReward: {
-        task: () => BilibiliAPI.home.reward(),
-        login: () => BilibiliAPI.home.home(),
-        watch: (aid, cid, mid, csrf, start_ts, played_time, realtime, type, play_type, dt) => BilibiliAPI.x.heartbeat(aid, cid, mid, csrf, start_ts, played_time, realtime, type, play_type, dt),
-        coin: (aid, csrf, multiply) => BilibiliAPI.x.add(aid, csrf, multiply),
-        share: () => {}
+        task: () => BilibiliAPI.home.reward(), // CORS
+        exp: () => BilibiliAPI.exp(),
+        login: () => BilibiliAPI.x.now(),
+        watch: (aid, cid, mid, start_ts, played_time, realtime, type, play_type, dt) => BilibiliAPI.x.heartbeat(aid, cid, mid, start_ts, played_time, realtime, type, play_type, dt),
+        coin: (aid, multiply) => BilibiliAPI.x.coin_add(aid, multiply),
+        share: (aid) => BilibiliAPI.x.share_add(aid)
     },
     // ajax调用B站API
-    last_ajax: 0,
-    cnt_frequently_ajax: 0,
+    runUntilSucceed: (callback, delay = 0, period = 50) => {
+        setTimeout(() => {
+            if (!callback()) BilibiliAPI.runUntilSucceed(callback, period, period);
+        }, delay);
+    },
+    processing: 0,
     ajax: (settings) => {
-        if (Date.now() - BilibiliAPI.last_ajax < 10) {
-            BilibiliAPI.cnt_frequently_ajax++;
-        } else {
-            BilibiliAPI.cnt_frequently_ajax = 0;
-        }
-        BilibiliAPI.last_ajax = Date.now();
-        if (BilibiliAPI.cnt_frequently_ajax > 20) throw new Error('调用BilibiliAPI太快，可能出现了bug');
-        if (settings.xhrFields) {
-            jQuery.extend(settings.xhrFields, {
-                withCredentials: true
-            });
-        } else {
-            settings.xhrFields = {
-                withCredentials: true
-            };
-        }
+        if (settings.xhrFields === undefined) settings.xhrFields = {};
+        settings.xhrFields.withCredentials = true;
         jQuery.extend(settings, {
             url: (settings.url.substr(0, 2) === '//' ? '' : '//api.live.bilibili.com/') + settings.url,
             method: settings.method || 'GET',
             crossDomain: true,
             dataType: settings.dataType || 'json'
         });
-        return jQuery.ajax(settings);
+        const p = jQuery.Deferred();
+        BilibiliAPI.runUntilSucceed(() => {
+            if (BilibiliAPI.processing > 8) return false;
+            ++BilibiliAPI.processing;
+            return jQuery.ajax(settings).then((arg1, arg2, arg3) => {
+                --BilibiliAPI.processing;
+                p.resolve(arg1, arg2, arg3);
+                return true;
+            }, (arg1, arg2, arg3) => {
+                --BilibiliAPI.processing;
+                p.reject(arg1, arg2, arg3);
+                return true;
+            });
+        });
+        return p;
+    },
+    ajaxWithCommonArgs: (settings) => {
+        if (!settings.data) settings.data = {};
+        settings.data.csrf = csrf_token;
+        settings.data.csrf_token = csrf_token;
+        settings.data.visit_id = visit_id;
+        return BilibiliAPI.ajax(settings);
     },
     // 以下按照URL分类
     ajaxGetCaptchaKey: () => {
@@ -99,14 +117,18 @@ var BilibiliAPI = {
             url: '//www.bilibili.com/plus/widget/ajaxGetCaptchaKey.php?js'
         });
     },
-    msg: (roomid, csrf_token, visit_id) => {
+    exp: () => {
+        // 获取今日已获得的投币经验?
         return BilibiliAPI.ajax({
+            url: '//www.bilibili.com/plus/account/exp.php'
+        });
+    },
+    msg: (roomid) => {
+        return BilibiliAPI.ajaxWithCommonArgs({
             method: 'POST',
             url: 'ajax/msg',
             data: {
-                roomid: roomid,
-                csrf_token: csrf_token,
-                visit_id: visit_id
+                roomid: roomid
             }
         });
     },
@@ -228,27 +250,24 @@ var BilibiliAPI = {
                 }
             });
         },
-        receive_award: (task_id, csrf_token) => {
+        receive_award: (task_id) => {
             // 领取任务奖励
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'activity/v1/task/receive_award',
                 data: {
-                    task_id: task_id,
-                    csrf_token: csrf_token
+                    task_id: task_id
                 }
             });
         }
     },
     av: {
-        getTimestamp: (csrf_token, visit_id, platform = 'pc') => {
-            return BilibiliAPI.ajax({
+        getTimestamp: (platform = 'pc') => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'av/v1/Time/getTimestamp',
                 data: {
-                    platform: platform,
-                    csrf_token: csrf_token,
-                    visit_id: visit_id
+                    platform: platform
                 }
             });
         }
@@ -285,40 +304,35 @@ var BilibiliAPI = {
         }
     },
     fans_medal: {
-        get_fans_medal_info: (uid, target_id, csrf_token, visit_id, source = 1) => {
-            return BilibiliAPI.ajax({
+        get_fans_medal_info: (uid, target_id, source = 1) => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'fans_medal/v1/fans_medal/get_fans_medal_info',
                 data: {
                     source: source,
                     uid: uid,
-                    target_id: target_id,
-                    csrf_token: csrf_token,
-                    visit_id: visit_id
+                    target_id: target_id
                 }
             });
         }
     },
     feed_svr: {
-        notice: (csrf_token) => {
-            return BilibiliAPI.ajax({
+        notice: () => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'feed_svr/v1/feed_svr/notice',
-                data: {
-                    csrf_token: csrf_token
-                }
+                data: {}
             });
         },
-        my: (page_size, csrf_token, live_status = 0, type = 0, offset = 0) => {
-            return BilibiliAPI.ajax({
+        my: (page_size, live_status = 0, type = 0, offset = 0) => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'feed_svr/v1/feed_svr/my',
                 data: {
                     live_status: live_status,
                     type: type,
                     page_size: page_size,
-                    offset: offset,
-                    csrf_token: csrf_token
+                    offset: offset
                 }
             });
         }
@@ -330,9 +344,9 @@ var BilibiliAPI = {
                 url: 'gift/v2/gift/bag_list'
             });
         },
-        send: (uid, gift_id, ruid, gift_num, biz_id, rnd, csrf_token, visit_id, coin_type = 'silver', platform = 'pc', biz_code = 'live', storm_beat_id = 0, price = 0) => {
+        send: (uid, gift_id, ruid, gift_num, biz_id, rnd, coin_type = 'silver', platform = 'pc', biz_code = 'live', storm_beat_id = 0, price = 0) => {
             // 消耗瓜子送礼
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'gift/v2/gift/send',
                 data: {
@@ -348,15 +362,13 @@ var BilibiliAPI = {
                     rnd: rnd,
                     storm_beat_id: storm_beat_id,
                     metadata: '',
-                    price: price,
-                    csrf_token: csrf_token,
-                    visit_id: visit_id
+                    price: price
                 }
             });
         },
-        bag_send: (uid, gift_id, ruid, gift_num, bag_id, biz_id, rnd, csrf_token, visit_id, platform = 'pc', biz_code = 'live', storm_beat_id = 0, price = 0) => {
+        bag_send: (uid, gift_id, ruid, gift_num, bag_id, biz_id, rnd, platform = 'pc', biz_code = 'live', storm_beat_id = 0, price = 0) => {
             // 送出包裹中的礼物
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'gift/v2/live/bag_send',
                 data: {
@@ -371,9 +383,7 @@ var BilibiliAPI = {
                     rnd: rnd,
                     storm_beat_id: storm_beat_id,
                     metadata: '',
-                    price: price,
-                    csrf_token: csrf_token,
-                    visit_id: visit_id
+                    price: price
                 }
             });
         },
@@ -425,16 +435,14 @@ var BilibiliAPI = {
                     }
                 });
             },
-            join: (roomid, raffleId, csrf_token, visit_id, type = 'Gift') => {
-                return BilibiliAPI.ajax({
+            join: (roomid, raffleId, type = 'Gift') => {
+                return BilibiliAPI.ajaxWithCommonArgs({
                     method: 'POST',
                     url: 'gift/v3/smalltv/join',
                     data: {
                         roomid: roomid,
                         raffleId: raffleId,
-                        type: type,
-                        csrf_token: csrf_token,
-                        visit_id: visit_id
+                        type: type
                     }
                 });
             },
@@ -466,13 +474,6 @@ var BilibiliAPI = {
             // 获取每日奖励情况
             return BilibiliAPI.ajax({
                 url: '//account.bilibili.com/home/reward'
-            });
-        },
-        home: () => {
-            // 每日登录
-            return BilibiliAPI.ajax({
-                url: '//account.bilibili.com/account/home',
-                dataType: 'html'
             });
         }
     },
@@ -598,16 +599,14 @@ var BilibiliAPI = {
                 url: 'live_user/v1/UserInfo/get_info_in_room?roomid=' + roomid
             });
         },
-        get_weared_medal: (uid, target_id, visit_id, csrf_token, source = 1) => {
-            return BilibiliAPI.ajax({
+        get_weared_medal: (uid, target_id, source = 1) => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'live_user/v1/UserInfo/get_weared_medal',
                 data: {
                     source: source,
                     uid: uid,
-                    target_id: target_id, // ruid
-                    visit_id: visit_id,
-                    csrf_token: csrf_token
+                    target_id: target_id // ruid
                 }
             });
         },
@@ -688,9 +687,9 @@ var BilibiliAPI = {
                     url: 'lottery/v1/Storm/check?roomid=' + roomid
                 });
             },
-            join: (id, captcha_token, captcha_phrase, roomid, csrf_token, visit_id, color = 16777215) => {
+            join: (id, captcha_token, captcha_phrase, roomid, color = 16777215) => {
                 // 参加节奏风暴
-                return BilibiliAPI.ajax({
+                return BilibiliAPI.ajaxWithCommonArgs({
                     method: 'POST',
                     url: 'lottery/v1/Storm/join',
                     data: {
@@ -698,31 +697,27 @@ var BilibiliAPI = {
                         color: color,
                         captcha_token: captcha_token,
                         captcha_phrase: captcha_phrase,
-                        roomid: roomid,
-                        csrf_token: csrf_token,
-                        visit_id: visit_id
+                        roomid: roomid
                     }
                 });
             }
         },
         lottery: {
-            check: (roomid) => {
-                // 检查是否有总督领奖(与节奏风暴?)
+            check_guard: (roomid) => {
+                // 检查是否有舰队领奖
                 return BilibiliAPI.ajax({
-                    url: 'lottery/v1/lottery/check?roomid=' + roomid
+                    url: 'lottery/v1/Lottery/check_guard?roomid=' + roomid
                 });
             },
-            join: (roomid, id, csrf_token, visit_id, type = 'guard') => {
+            join: (roomid, id, type = 'guard') => {
                 // 参加总督领奖
-                return BilibiliAPI.ajax({
+                return BilibiliAPI.ajaxWithCommonArgs({
                     method: 'POST',
-                    url: 'lottery/v1/lottery/join',
+                    url: 'lottery/v2/Lottery/join',
                     data: {
                         roomid: roomid,
                         id: id,
-                        type: type,
-                        csrf_token: csrf_token,
-                        visit_id: visit_id
+                        type: type
                     }
                 });
             }
@@ -730,22 +725,22 @@ var BilibiliAPI = {
     },
     mobile: {
         userOnlineHeart: () => {
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
-                url: 'mobile/userOnlineHeart'
+                url: 'mobile/userOnlineHeart',
+                data: {}
             });
         }
     },
     pay: {
-        coin2silver: (num, csrf_token, platform = 'pc') => {
+        coin2silver: (num, platform = 'pc') => {
             // 硬币兑换银瓜子(新API)，1硬币=450银瓜子
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'pay/v1/Exchange/coin2silver',
                 data: {
                     num: num,
-                    platform: platform,
-                    csrf_token: csrf_token
+                    platform: platform
                 }
             });
         },
@@ -759,14 +754,13 @@ var BilibiliAPI = {
                 url: 'pay/v1/Exchange/getStatus?platform=' + platform
             });
         },
-        silver2coin: (csrf_token, platform = 'pc') => {
+        silver2coin: (platform = 'pc') => {
             // 银瓜子兑换硬币，700银瓜子=1硬币
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'pay/v1/Exchange/silver2coin',
                 data: {
-                    platform: platform,
-                    csrf_token: csrf_token
+                    platform: platform
                 }
             });
         }
@@ -841,21 +835,48 @@ var BilibiliAPI = {
                 }
             });
         },
-        room_entry_action: (room_id, visit_id, csrf_token, platform = 'pc') => {
-            return BilibiliAPI.ajax({
+        room_entry_action: (room_id, platform = 'pc') => {
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: 'room/v1/Room/room_entry_action',
                 data: {
                     room_id: room_id,
-                    visit_id: visit_id,
-                    platform: platform,
-                    csrf_token: csrf_token
+                    platform: platform
                 }
             });
         },
         room_init: (id) => {
             return BilibiliAPI.ajax({
                 url: 'room/v1/Room/room_init?id=' + id
+            });
+        },
+        getConf: (room_id, platform = 'pc', player = 'web') => {
+            return BilibiliAPI.ajax({
+                url: 'room/v1/Danmu/getConf',
+                data: {
+                    room_id: room_id,
+                    platform: platform,
+                    player: player
+                }
+            });
+        },
+        getList: () => {
+            return BilibiliAPI.ajax({
+                url: 'room/v1/Area/getList'
+            });
+        },
+        getRoomList: (parent_area_id = 1, cate_id = 0, area_id = 0, page = 1, page_size = 30, sort_type = 'online', platform = 'web') => {
+            return BilibiliAPI.ajax({
+                url: 'room/v1/area/getRoomList',
+                data: {
+                    platform: platform,
+                    parent_area_id: parent_area_id,
+                    cate_id: cate_id,
+                    area_id: area_id,
+                    sort_type: sort_type,
+                    page: page,
+                    page_size: page_size
+                }
             });
         }
     },
@@ -890,9 +911,10 @@ var BilibiliAPI = {
             });
         },
         userOnlineHeart: () => {
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
-                url: 'User/userOnlineHeart'
+                url: 'User/userOnlineHeart',
+                data: {}
             });
         },
         getUserInfo: (ts) => { // ms
@@ -902,37 +924,87 @@ var BilibiliAPI = {
         }
     },
     x: {
-        add: (aid, csrf, multiply = 1) => {
+        coin_add: (aid, multiply = 1) => {
             // 投币
-            return BilibiliAPI.ajax({
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: '//api.bilibili.com/x/web-interface/coin/add',
                 data: {
                     aid: aid,
                     multiply: multiply,
-                    cross_domain: true,
-                    csrf: csrf
+                    cross_domain: true
                 }
             });
         },
-        heartbeat: (aid, cid, mid, csrf, start_ts, played_time = 0, realtime = 0, type = 3, play_type = 2, dt = 2) => {
-            // B站视频心跳，观看视频任务判定
-            return BilibiliAPI.ajax({
+        share_add: (aid) => {
+            // 分享
+            return BilibiliAPI.ajaxWithCommonArgs({
+                method: 'POST',
+                url: '//api.bilibili.com/x/web-interface/share/add',
+                data: {
+                    aid: aid,
+                    jsonp: 'jsonp'
+                }
+            });
+        },
+        heartbeat: (aid, cid, mid, start_ts, played_time = 0, realtime = 0, type = 3, play_type = 1, dt = 2) => {
+            // B站视频心跳
+            return BilibiliAPI.ajaxWithCommonArgs({
                 method: 'POST',
                 url: '//api.bilibili.com/x/report/web/heartbeat',
                 data: {
                     aid: aid,
                     cid: cid,
                     mid: mid, // uid
-                    csrf: csrf,
-                    start_ts: start_ts || Date.now(),
+                    start_ts: start_ts || (Date.now() / 1000),
                     played_time: played_time,
                     realtime: realtime,
                     type: type,
-                    play_type: play_type,
+                    play_type: play_type, // 1:播放开始，2:播放中
                     dt: dt
                 }
             });
+        },
+        now: () => {
+            // 点击播放视频时出现的事件，可能与登录/观看视频判定有关
+            return BilibiliAPI.ajax({
+                url: '//api.bilibili.com/x/report/click/now',
+                data: {
+                    jsonp: 'jsonp'
+                }
+            });
+        }
+    },
+    xlive: {
+        smalltv: {
+            check: (roomid) => {
+                return BilibiliAPI.ajax({
+                    url: 'xlive/lottery-interface/v3/smalltv/Check',
+                    data: {
+                        roomid: roomid
+                    }
+                });
+            },
+            join: (roomid, raffleId, type = 'Gift') => {
+                return BilibiliAPI.ajaxWithCommonArgs({
+                    method: 'POST',
+                    url: 'xlive/lottery-interface/v3/smalltv/Join',
+                    data: {
+                        roomid: roomid,
+                        raffleId: raffleId,
+                        type: type
+                    }
+                });
+            },
+            notice: (raffleId, type = 'small_tv') => {
+                return BilibiliAPI.ajax({
+                    url: 'xlive/lottery-interface/v3/smalltv/Notice',
+                    data: {
+                        type: type,
+                        raffleId: raffleId
+                    }
+                });
+            }
         }
     },
     YearWelfare: {
@@ -949,8 +1021,7 @@ var BilibiliAPI = {
     },
     DanmuWebSocket: class extends WebSocket {
         static stringToUint(string) {
-            const str = unescape(encodeURIComponent(string));
-            const charList = str.split('');
+            const charList = string.split('');
             const uintArray = [];
             for (var i = 0; i < charList.length; ++i) {
                 uintArray.push(charList[i].charCodeAt(0));
@@ -958,11 +1029,10 @@ var BilibiliAPI = {
             return new Uint8Array(uintArray);
         }
         static uintToString(uintArray) {
-            const encodedString = String.fromCharCode.apply(null, uintArray);
-            const decodedString = decodeURIComponent(escape(encodedString));
-            return decodedString;
+            return decodeURIComponent(escape(String.fromCharCode.apply(null, uintArray)));
         }
-        constructor(uid, roomid, serveraddress = 'wss://broadcastlv.chat.bilibili.com/sub', protover = 1, platform = 'web', clientver = '1.4.6') {
+        constructor(uid, roomid, serveraddress = 'wss://broadcastlv.chat.bilibili.com/sub') {
+            // 总字节长度 int(4bytes) + 头字节长度(16=4+2+2+4+4) short(2bytes) + protover(1,2) short(2bytes) + operation int(4bytes) + sequence(1,0) int(4bytes) + Data
             super(serveraddress);
             this.binaryType = 'arraybuffer';
             this.handlers = {
@@ -972,19 +1042,21 @@ var BilibiliAPI = {
                 cmd: [],
                 receive: []
             };
+            this.closed = false;
             this.addEventListener('open', () => {
-                this.sendLoginPacket(uid, roomid, protover, platform, clientver).sendHeartBeatPacket();
+                this.sendLoginPacket(uid, roomid).sendHeartBeatPacket();
                 this.heartBeatHandler = setInterval(() => {
                     this.sendHeartBeatPacket();
                 }, 30e3);
             });
-            this.addEventListener('close', (event) => {
+            this.addEventListener('close', () => {
                 if (this.heartBeatHandler) clearInterval(this.heartBeatHandler);
-                if (event.code === 1000) return;
+                if (this.closed) return;
                 // 自动重连
                 setTimeout(() => {
-                    const ws = new BilibiliAPI.DanmuWebSocket(uid, roomid, serveraddress, protover, platform, clientver);
+                    const ws = new BilibiliAPI.DanmuWebSocket(uid, roomid, serveraddress);
                     ws.handlers = this.handlers;
+                    ws.unzip = this.unzip;
                     for (const key in this.handlers) {
                         if (this.handlers.hasOwnProperty(key)) {
                             this.handlers[key].forEach(handler => {
@@ -1023,33 +1095,50 @@ var BilibiliAPI = {
                             ws: ws
                         }
                     }));
-                }, 5e3);
+                }, 10e3);
             });
             this.addEventListener('message', (event) => {
-                let dv = new DataView(event.data);
-                let position = 0;
-                while (position < event.data.byteLength) {
+                const dv = new DataView(event.data);
+                let len = 0;
+                for (let position = 0; position < event.data.byteLength; position += len) {
                     /*
-                    登录 Uint(4byte) + 00 10 + 00 01 + 00 00 00 08 + 00 00 00 01
-                    心跳 Uint(4byte) + 00 10 + 00 01 + 00 00 00 03 + 00 00 00 01 + Uint(4byte)
-                    弹幕消息/系统消息/送礼 Uint(4byte) + 00 10 + 00 00 + 00 00 00 05 + 00 00 00 00 + Data
+                    登录 总字节长度 int(4bytes) + 头字节长度 short(2bytes) + 00 01 + 00 00 00 08 + 00 00 00 01
+                    心跳 总字节长度 int(4bytes) + 头字节长度 short(2bytes) + 00 01 + 00 00 00 03 + 00 00 00 01 + 直播间人气 int(4bytes)
+                    弹幕消息/系统消息/送礼 总字节长度 int(4bytes) + 头字节长度 short(2bytes) + 00 00 + 00 00 00 05 + 00 00 00 00 + Data
                     */
-                    let len = dv.getUint32(position);
-                    let headerLen = dv.getUint16(position + 4);
-                    let protover = dv.getUint16(position + 6);
-                    let operation = dv.getUint32(position + 8);
-                    let sequence = dv.getUint32(position + 12);
+                    len = dv.getUint32(position);
+                    const headerLen = dv.getUint16(position + 4);
+                    const protover = dv.getUint16(position + 6);
+                    const operation = dv.getUint32(position + 8);
+                    const sequence = dv.getUint32(position + 12);
+                    let data = event.data.slice(position + headerLen, position + len);
+                    if (protover === 2 && this.unzip) data = this.unzip(data);
+                    this.dispatchEvent(new CustomEvent('receive', {
+                        detail: {
+                            len: len,
+                            headerLen: headerLen,
+                            protover: protover,
+                            operation: operation,
+                            sequence: sequence,
+                            data: data
+                        }
+                    }));
+                    if (protover === 2 && !this.unzip) continue;
+                    const dataV = new DataView(data);
                     switch (operation) {
                         case 3:
-                            const num = dv.getUint32(headerLen); // 在线人数
+                        {
+                            const num = dataV.getUint32(0); // 在线人数
                             this.dispatchEvent(new CustomEvent('heartbeat', {
                                 detail: {
                                     num: num
                                 }
                             }));
                             break;
+                        }
                         case 5:
-                            const str = BilibiliAPI.DanmuWebSocket.uintToString(new Uint8Array(event.data, position + headerLen, len - headerLen));
+                        {
+                            const str = BilibiliAPI.DanmuWebSocket.uintToString(new Uint8Array(data));
                             const obj = JSON.parse(str);
                             this.dispatchEvent(new CustomEvent('cmd', {
                                 detail: {
@@ -1058,23 +1147,20 @@ var BilibiliAPI = {
                                 }
                             }));
                             break;
+                        }
                         case 8:
                             this.dispatchEvent(new CustomEvent('login'));
                             break;
                     }
-                    this.dispatchEvent(new CustomEvent('receive', {
-                        detail: {
-                            len: len,
-                            headerLen: headerLen,
-                            protover: protover,
-                            operation: operation,
-                            sequence: sequence,
-                            data: event.data.slice(position + headerLen, position + len)
-                        }
-                    }));
-                    position += len;
                 }
             });
+        }
+        close(code, reason) {
+            this.closed = true;
+            super.close(code, reason);
+        }
+        setUnzip(fn) {
+            this.unzip = fn;
         }
         bind(onreconnect = undefined, onlogin = undefined, onheartbeat = undefined, oncmd = undefined, onreceive = undefined) {
             /*
@@ -1116,7 +1202,7 @@ var BilibiliAPI = {
                 this.handlers.receive.push(onreceive);
             }
         }
-        sendData(data, protover = 1, operation = 2, sequence = 1) {
+        sendData(data, protover, operation, sequence) {
             if (this.readyState !== WebSocket.OPEN) throw new Error('DanmuWebSocket未连接');
             switch (Object.prototype.toString.call(data)) {
                 case '[object Object]':
@@ -1142,22 +1228,22 @@ var BilibiliAPI = {
             }
             return this;
         }
-        sendLoginPacket(uid, roomid, protover = 1, platform = 'web', clientver = '1.4.6') {
-            // Uint(4byte) + 00 10 + 00 01 + 00 00 00 07 + 00 00 00 01 + Data 登录数据包
+        sendLoginPacket(uid, roomid) {
+            // 总字节长度 int(4bytes) + 头字节长度 short(2bytes) + 00 01 + 00 00 00 07 + 00 00 00 01 + Data 登录数据包
             const data = {
                 'uid': parseInt(uid, 10),
                 'roomid': parseInt(roomid, 10),
-                'protover': protover,
-                'platform': platform,
-                'clientver': clientver
+                'protover': 2,
+                'platform': 'web',
+                'clientver': '1.6.3',
+                'type': 2
             };
             return this.sendData(data, 1, 7, 1);
         }
         sendHeartBeatPacket() {
-            // Uint(4byte) + 00 10 + 00 01 + 00 00 00 02 + 00 00 00 01 + Data 心跳数据包
+            // 总字节长度 int(4bytes) + 头字节长度 short(2bytes) + 00 01 + 00 00 00 02 + 00 00 00 01 + Data 心跳数据包
             return this.sendData('[object Object]', 1, 2, 1);
         }
     }
 };
-
 BilibiliAPI.DanmuWebSocket.headerLength = 16;

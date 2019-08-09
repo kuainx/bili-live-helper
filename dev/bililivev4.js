@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili直播间自动领便当
 // @namespace    ekuai
-// @version      4.00
+// @version      4.11
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
@@ -74,7 +74,6 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             }
         }
         var result = window.parent.recognize(ctx.getImageData(0,0,120,40));
-        // var result = OCRAD(ctx.getImageData(0,0,120,40));
         var origin = result;
         var correctStr = {
             'g': 9,
@@ -114,9 +113,6 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         return result;
     };
     window.ls = function (){
-        // var js = document.createElement("script");
-        // js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
-        // document.body.insertBefore(js,document.body.firstChild);
         document.domain='bilibili.com';
         document.body.style="background-color:#66ccff";
         var canvas = document.createElement("canvas");
@@ -131,15 +127,18 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         image.onload=function(){
             setTimeout(function(){
                 var result=draw();
-                window.parent.h5alert("");
                 document.getElementById("b").innerHTML='<input id="input" value="'+result+'" onkeypress="if(event.keyCode==13){try{if(window.parent.valid && typeof(window.parent.valid)==\'function\'){window.parent.valid(eval(document.getElementById(\'input\').value));}else{console.log(CurentTime()+\'回调失败，请反馈\');}}catch(e){};return false;}"/>';
             },2000);
         };
         document.body.insertBefore(image,document.body.firstChild);
     };
-    window.onload = ls;
-
+    window.addEventListener('message',function(e){
+        ls();
+    });
     }else if((window.location.href+"").indexOf("my_groups")>10){
+        var js = document.createElement("script");
+        js.src="https://static.hdslb.com/live-static/libs/jquery/jquery-1.11.3.min.js";
+        document.body.insertBefore(js,document.body.firstChild);
         window.GroupSign = function (group_id,owner_id,medal){
             $.ajax({
                 type: "get",
@@ -154,7 +153,6 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                     withCredentials: true
                 },
                 success: function (data) {
-                    //console.log(data);
                     if(data.code===0){
                         if(data.data.status===0){
                             console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
@@ -167,35 +165,26 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                 }
             });
         };
-        document.domain='bilibili.com';
-        var js = document.createElement("script");
-        js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
-        document.body.insertBefore(js,document.body.firstChild);
-        var data =JSON.parse(document.querySelector("pre").innerHTML);
-        if(data.code===0){
-            var Grouplist=data.data.list;
-            Grouplist.forEach(function(val,index){
-                var delay = (parseInt(Math.random()*5)+1)*1000;
-                setTimeout(function(){
-                    GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
-                },delay*(index+1));
-            });
-            parent.localStorage.livejs_GroupSign=new Date().toLocaleDateString();
-        }else{
-            console.log("ERROR",'Grouplist',data);
-        }
-        parent.document.querySelector(".helper_none").style.display="none";
-        
+        window.GroupSignGet = function(data){
+            if(data.code===0){
+                var Grouplist=data.data.list;
+                Grouplist.forEach(function(val,index){
+                    var delay = (parseInt(Math.random()*5)+1)*1000;
+                    setTimeout(function(){
+                        window.GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+                    },delay*(index+1));
+                });
+                document.domain='bilibili.com';
+                parent.localStorage.livejs_GroupSign=new Date().toLocaleDateString();
+            }else{
+                console.log("ERROR",'Grouplist',data);
+            }
+        };
+        var data =document.querySelector("pre").innerHTML;
+        GroupSignGet(JSON.parse(data));
     }else{
-
-
-
-        /**********************************************/
-        /*---------------直播间----------------------------*/
-
-
      /***********新直播间************/
-    (function($) {
+(function($) {
     $.fn.dragDiv = function(options) {
         return this.each(function() {
             var _moveDiv = $(this);//需要拖动的Div
@@ -239,23 +228,20 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         });
     };
 })(jQuery);
-
-function getCookie(name){
-    var strcookie = document.cookie;//获取cookie字符串
-    var arrcookie = strcookie.split("; ");//分割
-    //遍历匹配
-    for ( var i = 0; i < arrcookie.length; i++) {
-        var arr = arrcookie[i].split("=");
-        if (arr[0] == name){
-            return arr[1];
+    function getCookie(name){
+        var strcookie = document.cookie;//获取cookie字符串
+        var arrcookie = strcookie.split("; ");//分割
+        //遍历匹配
+        for ( var i = 0; i < arrcookie.length; i++) {
+            var arr = arrcookie[i].split("=");
+            if (arr[0] == name){
+                return arr[1];
+            }
         }
+        return "";
     }
-    return "";
-}
-
     window.clo="";//计时器
     $().ready(function(){
-
         /****************************************************************/
         /*----------------------小电视-------------------------------------*/
         function Listener_smalltv(){
@@ -358,92 +344,86 @@ function getCookie(name){
         function getSmallTV_join(roomid,raffleId,short_id,visit_id){
             window.history.pushState({},0,'https://live.bilibili.com/'+short_id);
             $.ajax({
-                    type: "get",
-                    url: "//api.live.bilibili.com/gift/v3/smalltv/join",
-                    data: {
-                        roomid:roomid,
-                        raffleId:raffleId,
-                        type:'Gift',
-                        csrf_token: getCookie("bili_jct"),
-                        visit_id: visit_id
-                    },
-                    datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                    crossDomain:true,
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function (data) {
-                        //console.log(data);
-                        if(data.code===0){
-                            var giftType=data.data.type;
-                            var restime = data.data.time-(-60);//额外等一分钟
-                            msg("成功参加了直播间【"+short_id+"】的小电视（"+giftType+"）抽奖，还有 "+restime+" 秒开奖","success",5000);
-                            console.log(CurentTime()+"成功参加了直播间【"+short_id+"】的小电视（"+giftType+"）抽奖，还有 "+restime+" 秒开奖");
-                            restime*=1000;
-                            setTimeout(function(){
-                                getSmallTV_notice(roomid,raffleId,short_id,giftType);
-                            },restime);
-                        }else if(data.code===400){
-                            close();
-                            getSmallTV_close();
-                            msg("被禁止访问","caution",5000);
-                            console.error("ERRROR","关闭脚本",CurentTime(),"smallTvJoin",data);
-                        }else{
-                            msg("参加小电视抽奖失败了 (´･_･`)","caution",5000);
-                            console.error("ERRROR",CurentTime(),"smallTvJoin",data);
-                        }
+                type: "get",
+                url: "//api.live.bilibili.com/gift/v3/smalltv/join",
+                data: {
+                    roomid:roomid,
+                    raffleId:raffleId,
+                    type:'Gift',
+                    csrf_token: getCookie("bili_jct"),
+                    visit_id: visit_id
+                },
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    //console.log(data);
+                    if(data.code===0){
+                        var giftType=data.data.type;
+                        var restime = data.data.time-(-60);//额外等一分钟
+                        msg("成功参加了直播间【"+short_id+"】的小电视（"+giftType+"）抽奖，还有 "+restime+" 秒开奖","success",5000);
+                        console.log(CurentTime()+"成功参加了直播间【"+short_id+"】的小电视（"+giftType+"）抽奖，还有 "+restime+" 秒开奖");
+                        restime*=1000;
+                        setTimeout(function(){
+                            getSmallTV_notice(roomid,raffleId,short_id,giftType);
+                        },restime);
+                    }else if(data.code===400){
+                        close();
+                        getSmallTV_close();
+                        msg("被禁止访问","caution",5000);
+                        console.error("ERRROR","关闭脚本",CurentTime(),"smallTvJoin",data);
+                    }else{
+                        msg("参加小电视抽奖失败了 (´･_･`)","caution",5000);
+                        console.error("ERRROR",CurentTime(),"smallTvJoin",data);
                     }
-                });
+                }
+            });
         }
-
         function getSmallTV_notice(roomid,raffleId,short_id,giftType,steps){
             steps=steps||0;
             $.ajax({
-                    type: "get",
-                    url: "//api.live.bilibili.com/gift/v3/smalltv/notice",
-                    data: {
-                        type:giftType,
-                        raffleId:raffleId
-                    },
-                    datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                    crossDomain:true,
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function (data) {
-                        //console.log(data);
-                        if(data.code==0){
-                            var gift_name = data.data.gift_name;
-                            var gift_num = data.data.gift_num;
-                            var gift_from = data.data.gift_from;
-                            if(gift_num){
-                                msg("你从直播间【"+short_id+"】抽到了【"+gift_from+"】赠送的礼物： "+gift_name+" X "+gift_num+" !","success",5000);
-                                console.log(CurentTime()+"你从直播间【"+short_id+"】抽到了【"+gift_from+"】赠送的小电视（"+giftType+"）礼物： "+gift_name+" X "+gift_num+" !");
-                            }
+                type: "get",
+                url: "//api.live.bilibili.com/gift/v3/smalltv/notice",
+                data: {
+                    type:giftType,
+                    raffleId:raffleId
+                },
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    //console.log(data);
+                    if(data.code==0){
+                        var gift_name = data.data.gift_name;
+                        var gift_num = data.data.gift_num;
+                        var gift_from = data.data.gift_from;
+                        if(gift_num){
+                            msg("你从直播间【"+short_id+"】抽到了【"+gift_from+"】赠送的礼物： "+gift_name+" X "+gift_num+" !","success",5000);
+                            console.log(CurentTime()+"你从直播间【"+short_id+"】抽到了【"+gift_from+"】赠送的小电视（"+giftType+"）礼物： "+gift_name+" X "+gift_num+" !");
+                        }
+                    }else{
+                        if(steps<=3){
+                            setTimeout(function(){
+                                getSmallTV_notice(roomid,raffleId,short_id,giftType,steps+1);
+                            },60000);
                         }else{
-                            if(steps<=3){
-                                setTimeout(function(){
-                                    getSmallTV_notice(roomid,raffleId,short_id,giftType,steps+1);
-                                },60000);
-                            }else{
-                                msg("获取中奖信息时出错！","caution",5000);
-                                console.error("ERROR",CurentTime(),"smallTvNotice",data);
-                            }
+                            msg("获取中奖信息时出错！","caution",5000);
+                            console.error("ERROR",CurentTime(),"smallTvNotice",data);
                         }
                     }
-                });
+                }
+            });
         }
-
         Listener_smalltv();
-
-
         /****************************************************************/
         var pr = $("#gift-control-vm");//礼物栏
         pr.append("<div id='helper_probar'><span id='helper_progress'></span></div>");
-         $("body").append("<style>.helper_msg{pointer-events: auto !important;}#helper_probar{position:absolute;top:0px;width:100%;height:3px;border-radius:1.5px;background-color:#666;z-index:0}#helper_progress{position:absolute;height:3px;width:0;border-radius:3px;background-color:#fff;transition:all 1s linear}#helper_canvas,#helper_img{display:block}.blue-shadow{box-shadow:0 0 10px 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8}.green-shadow{box-shadow:0 0 10px 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A}.pink-shadow{box-shadow:0 0 10px 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275}.helper_hide{visibility:hidden}.helper_none{position: fixed;left: 0;top: 0;width:70%;height:70%;z-index: 10000;background: white;}</style>");
+         $("body").append("<style>.helper_msg{pointer-events: auto !important;}#helper_probar{position:absolute;top:0px;width:100%;height:3px;border-radius:1.5px;background-color:#666;z-index:0}#helper_progress{position:absolute;height:3px;width:0;border-radius:3px;background-color:#fff;transition:all 1s linear}#helper_canvas,#helper_img{display:block}.blue-shadow{box-shadow:0 0 10px 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8,0 0 1px #3B8CF8}.green-shadow{box-shadow:0 0 10px 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A,0 0 1px #68B37A}.pink-shadow{box-shadow:0 0 10px 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275,0 0 1px #FD4275}.helper_hide{visibility:hidden}.helper_none,.helper_group{position: fixed;left: 0;top: 0;width:70%;height:70%;z-index: 10000;background: white;}</style>");
         var progress = $("span#helper_progress");
-
-        init();
         function getSmallTV_close(){
             $(document).off("DOMNodeInserted");
             $("#helper_probar").css("background-color","rgb(227, 98, 9)");
@@ -452,7 +432,6 @@ function getCookie(name){
             clearInterval(window.clo);
             $("#helper_progress").remove();
         }
-
         function showHelp(){
             $("body").append('<style>#helper_help{width:100%;height:100%;top:0;left:0;position:fixed;z-index:999999;background-color:rgba(0,0,0,.4);overflow:hidden;word-break:break-all}.helper_lisences{background-color:#555;box-shadow:0 0 15px #111;margin-left:20%;margin-top:10px;width:60%;font-size:18px;color:#fff;border-radius:5px;border:1px solid #fff;padding:5px 10px}</style><div id="helper_help"><div class="helper_lisences"><p><em>当你看到该提示，说明你的脚本是第一次启动或在最近发生了更新，请阅读以下说明 (5秒后可点击空白处关闭)</em></p><h4>使用须知：</h4><ul><li>请勿宣传，闷声发财</li><li>使用本脚本而导致的一切后果由你本人承担</li><li>MIT协议，在任何情况下对本脚本进行二次开发均需在UI中注明版权</li></ul><h4>功能简介：</h4><ul><li>单击进度条白色部分：查看宝箱领取进度</li><li>双击进度条灰色部分：查看低保领取情况</li><li>右键单击进度条，拖动绿色提示：更改脚本提示信息的位置</li></ul><h4>注意事项：（重要）</h4><ul><li>兼容：FireFox/Chrome + Tampermonkey 。其他兼容性问题概不负责</li><li>已知与助手不兼容</li><li>仅保留最后一个直播间的脚本生效，回到原直播间的话，请刷新</li><li>进度条显示在视频下方，自动领瓜子开始时将自动隐藏宝箱</li><li>领低保功能存在延迟（20秒），有失败的可能性，非脚本问题</li><li>长时间挂机有可能导致网站检测离线，脚本工作不正常，非脚本问题</li><li>本脚本由mscststs的bililive脚本二开而成</li><li>showHelp可再次打开本帮助</li></ul></div></div>');
                 setTimeout(function(){
@@ -461,7 +440,6 @@ function getCookie(name){
                     $("#helper_help").click(function(){
                         $("#helper_help").fadeOut(function(){$(this).remove();});
                     });
-
                 },5000);
         }
         function init(){
@@ -474,8 +452,6 @@ function getCookie(name){
             $(document).on("click",".helper_msg",function(){
                 $(".helper_msg").fadeOut().remove();
             });
-
-
             $(document).on("mousedown","#helper_probar",function(e) {
                 //右键为3
                 if (3 == e.which) {
@@ -491,8 +467,6 @@ function getCookie(name){
                     });
                 }
             });
-
-
             document.domain="bilibili.com";
             window.helper_errcount=0;
             window.ontask=0;
@@ -510,7 +484,7 @@ function getCookie(name){
             if(localStorage.livejs_Sign!=date){
                 setTimeout(function(){
                     signGet();
-                },15000);
+                },10000);
             }else{
                 console.log('Sign',date+"用户已经签到过");
             }
@@ -525,27 +499,28 @@ function getCookie(name){
             if(localStorage.livejs_WatchTask!=date){
                 setTimeout(function(){
                     doubleWatchTaskCheck();
-                },20000);
+                },25000);
             }else{
                 console.log('DoubleWatch',date+"DoubleWatch任务完成");
             }
             var js = document.createElement("script");
             js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/ocrad.js";
             document.body.insertBefore(js,document.body.firstChild);
-            // js = document.createElement("script");
-            // js.src="https://cdn-1251935573.cos.ap-chengdu.myqcloud.com/jquery.min.js";
-            // document.body.insertBefore(js,document.body.firstChild);
             var audio = document.createElement("audio");
             audio.id="msg";
             audio.src="https://wx.qq.com/zh_CN/htmledition/v2/sound/msg.mp3";
             document.body.insertBefore(audio,document.body.firstChild);
-            
         }
-        
+        init();
         function mobileHeartBeat(){
             $.ajax({
                 type: "post",
                 url: "//api.live.bilibili.com/mobile/userOnlineHeart",
+                data: {
+                    csrf: getCookie("bili_jct"),
+                    csrf_token: getCookie("bili_jct"),
+                    visit_id: ''
+                },
                 datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
                 crossDomain:true,
                 xhrFields: {
@@ -582,7 +557,6 @@ function getCookie(name){
                     }else{
                         console.log("doubleWatchTaskCheck","status:"+data.data.double_watch_info.status);
                         localStorage.livejs_WatchTask=new Date().toLocaleDateString();
-                        
                     }
                 }
             });
@@ -626,7 +600,7 @@ function getCookie(name){
                         if(data.data.status===0){
                             setTimeout(function(){
                                 signDo();
-                            },10000);
+                            },2000);
                         }else{
                             console.log("SignGet","签到过了，status:"+data.data.status+"获得"+data.data.text+data.data.specialText);
                             localStorage.livejs_Sign=new Date().toLocaleDateString();
@@ -655,40 +629,23 @@ function getCookie(name){
                         console.log("SignDo","今天已签到过了");
                         localStorage.livejs_Sign=new Date().toLocaleDateString();
                     }else{
-                        console.error("ERROR","SignDo",data)
+                        console.error("ERROR","SignDo",data);
                     }
                 }
             });
         }
         function groupListGet(){
-            $("body").append("<iframe class='helper_none' src='https://api.live.bilibili.com/link_group/v1/member/my_groups'></iframe>");
-            window.groupListGetDeal=function(data){
-                if(data.code===0){
-                    var Grouplist=data.data.list;
-                    Grouplist.forEach(function(val,index){
-                        var delay = (parseInt(Math.random()*5)+1)*1000;
-                        setTimeout(function(){
-                            GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
-                        },delay*(index+1));
-                    });
-                    localStorage.livejs_GroupSign=new Date().toLocaleDateString();
-                }else{
-                    console.log("ERROR",'Grouplist',data);
-                }
-            };
+            $("body").append("<iframe class='helper_group' style='display:none' src='https://api.live.bilibili.com/link_group/v1/member/my_groups'></iframe>");
         }
         function start(){
             $("#helper_progress").click(function(){
-            msg("第"+window.round+"轮，第"+window.rank+"个宝箱","caution",5000);
+                msg("第"+window.round+"轮，第"+window.rank+"个宝箱","caution",5000);
             });
            window.round = parseInt($("#gift-control-vm  div.round-count.t-center > span").text().slice(2,3));
             window.rank = $("div.in-countdown span").text().slice(0,1)/3;
             switch_color(window.rank);
             window.localStorage["helper_time"]=getSeconds();
             $("div.treasure-box").fadeOut();
-
-
-
             window.clo = setInterval(function(){
                 var per =  (getSeconds()-window.localStorage["helper_time"])/(window.rank*180)*100;
                 if(per>100){
@@ -706,33 +663,30 @@ function getCookie(name){
                         ontask=1;
                         console.log(CurentTime()+"进入验证码识别回调过程");
                         $("body").append("<iframe class='helper_none' src='//api.live.bilibili.com/lottery/v1/SilverBox/getCaptcha?ts="+getMiliSeconds()+"'></iframe>");
+                        setTimeout(function(){
+                            document.querySelector(".helper_none").contentWindow.postMessage("","*");
+                            window.parent.h5alert("");
+                        },2000);
                     }
-
-                   }
-
+                }
             },1000);
         }
-
-
         function turn(){
             window.localStorage["helper_time"]=getSeconds();
             if(window.rank==3&&window.round>=parseInt($("#gift-control-vm  div.round-count.t-center > span").text().slice(6,7))){
                 close();
                 msg("瓜子领取完毕啦");
-            }else
-            if(window.rank==3){
+            }else if(window.rank==3){
                 window.round++;
                 window.rank=1;
             }else{
-            window.rank++;
+                window.rank++;
             }
             switch_color(window.rank);
         }
-
         function setProgress(percent){
             var progress = $("span#helper_progress");
             progress.css("width",percent);
-            //console.log(percent);
         }
         function switch_color(rank){
              var progress = $("span#helper_progress");
@@ -747,7 +701,6 @@ function getCookie(name){
               $("span#helper_progress").addClass("pink-shadow");//第三个箱子
             }
         }
-
         function isExist(){
             var time = $("#gift-control-vm  div.count-down").text()||"00:00";
             if(time!="00:00"){
@@ -758,7 +711,6 @@ function getCookie(name){
         function getSeconds(){//取得秒数时间戳
             return Date.parse(new Date())/1000;
         }
-
         function getMiliSeconds(){//取得毫秒数时间戳
             return (new Date()).valueOf();
         }
@@ -781,17 +733,11 @@ function getCookie(name){
 
             var left = window.localStorage["helper_msg_left"];
             var top = window.localStorage["helper_msg_top"];
-
             $("body").append('<div class="link-toast '+level+'"data-id="'+id+'" style="left: '+left+'; top: '+top+';"><span class="toast-text">'+text+'</span></div>');
             $("div.link-toast[data-id='"+id+"']").slideDown("normal",function(){setTimeout(function(){$("div.link-toast[data-id='"+id+"']").fadeOut("normal",function(){$("div.link-toast[data-id='"+id+"']").remove();});},time);});
-
         }
-
         function refreshSilver(val){
-            var aval = '<i data-v-06a3a440="" class="svg-icon silver-seed"></i>'+val;
-            $("#gift-control-vm > div > div.vertical-middle.dp-table.section.right-part > div > div.supporting-info > div > div:nth-child(2)").html(aval);
-            $("#gold-store-vm > div > div.dp-table-cell.v-middle > div > div.content > div > footer > span:nth-child(3)").html(aval);
-            $("#link-navbar-vm > nav > div > div.right-part.h-100.f-right.f-clear > div.user-panel.dp-table.h-100.p-relative.v-top.f-clear.f-left > div > div.user-panel-ctnr.p-relative.dp-i-block.v-middle > div > div > div > div.content-ctnr.border-box.p-relative.over-hidden > div.section-block.info-items.dp-none.a-move-in-left > div:nth-child(1) > div > div:nth-child(2) > a > div > span.right-label.f-right.v-middle > span").text(val);
+            $("#gift-control-vm > div > div.vertical-middle.dp-table.section.right-part > div > div.supporting-info > div > div:nth-child(1) > div:nth-child(2) > span")[0].innerHTML=val;
         }
         function ticket(data){//对ajax数据进行判断
             $("iframe.helper_none").remove();
@@ -815,46 +761,46 @@ function getCookie(name){
         function currentTask(){
             console.log(CurentTime()+"获取新一轮宝箱");
             $.ajax({
-                    type: "get",
-                    url: "//api.live.bilibili.com/lottery/v1/SilverBox/getCurrentTask",
-                    datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                    crossDomain:true,
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function (data) {
-                        console.log("silverCurrentTask","code:"+data.code+"message:"+data.message);
-                    },
-                    error: function (data) {
-                        msg("自动领瓜子出错啦！！","caution");
-                        console.error("ERROR","silverCurrentTask",data);
-                    }
-                });
+                type: "get",
+                url: "//api.live.bilibili.com/lottery/v1/SilverBox/getCurrentTask",
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    console.log("silverCurrentTask","code:"+data.code+"message:"+data.message);
+                },
+                error: function (data) {
+                    msg("自动领瓜子出错啦！！","caution");
+                    console.error("ERROR","silverCurrentTask",data);
+                }
+            });
         }
         window.valid = function(valid){
             console.log(CurentTime()+"尝试回调成功，可以获取"+valid);
             var ntime = getSeconds();
             $.ajax({
-                    type: "get",
-                    url: "//api.live.bilibili.com/lottery/v1/SilverBox/getAward",
-                    data: {
-                        time_start:ntime-window.rank*180,
-                        end_time:ntime,
-                        captcha:valid
-                    },
-                    datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                    crossDomain:true,
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function (data) {
-                        ticket(data);
-                    },
-                    error: function (data) {
-                        msg("自动领瓜子出错啦！！","caution");
-                        console.error("ERROR","silverCurrentTask",data);
-                    }
-                });
+                type: "get",
+                url: "//api.live.bilibili.com/lottery/v1/SilverBox/getAward",
+                data: {
+                    time_start:ntime-window.rank*180,
+                    end_time:ntime,
+                    captcha:valid
+                },
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    ticket(data);
+                },
+                error: function (data) {
+                    msg("自动领瓜子出错啦！！","caution");
+                    console.error("ERROR","silverCurrentTask",data);
+                }
+            });
         };
         window.h5alert = function(){
            if (window.Notification){
@@ -877,10 +823,5 @@ function getCookie(name){
             return OCRAD(ctx);
         };
     });
-
-/*-----------------直播间-------------------------------------------*/
-/***************************************************************/
-
     }
-
 })();
