@@ -267,7 +267,9 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             if(window.smallTvRoom[room]===undefined || window.smallTvRoom[room]<new Date().getTime()){
                 if(Math.random()>0.3){
                     window.smallTvRoom[room]=new Date().getTime()+10000;//10s内重复房间不计
-                    getSmallTV_init(room);
+                    setTimeout(function(){
+                            getSmallTV_init(room);
+                    },1000);
                 }else{
                     console.log("SmallTv","战略性释放"+room);
                 }
@@ -297,7 +299,10 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                         if(short_id===0){
                             short_id = room_id;
                         }
-                        getSmallTV_check(room_id,short_id);
+                        setTimeout(function(){
+                            getSmallTV_check(room_id,short_id);
+                        },1000);
+                        
                     }else{
                         msg("在获取房间信息的时候出错！","caution",5000);
                         console.error("ERROR","smallTvInit",data);
