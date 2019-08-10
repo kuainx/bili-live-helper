@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili直播间自动领便当
 // @namespace    ekuai
-// @version      4.11
+// @version      4.12
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
@@ -139,42 +139,16 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         var js = document.createElement("script");
         js.src="https://static.hdslb.com/live-static/libs/jquery/jquery-1.11.3.min.js";
         document.body.insertBefore(js,document.body.firstChild);
-        window.GroupSign = function (group_id,owner_id,medal){
-            $.ajax({
-                type: "get",
-                url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
-                data: {
-                    group_id: group_id,
-                    owner_id: owner_id
-                },
-                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
-                crossDomain:true,
-                xhrFields: {
-                    withCredentials: true
-                },
-                success: function (data) {
-                    if(data.code===0){
-                        if(data.data.status===0){
-                            console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
-                        }else{
-                            console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
-                        }
-                    }else{
-                        console.error("ERROR",'GroupSign',data);
-                    }
-                }
-            });
-        };
         window.GroupSignGet = function(data){
+            document.domain='bilibili.com';
             if(data.code===0){
                 var Grouplist=data.data.list;
                 Grouplist.forEach(function(val,index){
                     var delay = (parseInt(Math.random()*5)+1)*1000;
                     setTimeout(function(){
-                        window.GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+                        window.parent.GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
                     },delay*(index+1));
                 });
-                document.domain='bilibili.com';
                 parent.localStorage.livejs_GroupSign=new Date().toLocaleDateString();
             }else{
                 console.log("ERROR",'Grouplist',data);
@@ -670,8 +644,10 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                         $("body").append("<iframe class='helper_none' src='//api.live.bilibili.com/lottery/v1/SilverBox/getCaptcha?ts="+getMiliSeconds()+"'></iframe>");
                         setTimeout(function(){
                             document.querySelector(".helper_none").contentWindow.postMessage("","*");
-                            window.parent.h5alert("");
                         },2000);
+                        setTimeout(function(){
+                            window.parent.h5alert("");
+                        },4000);
                     }
                 }
             },1000);
@@ -826,6 +802,32 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         };
         window.recognize = function(ctx){
             return OCRAD(ctx);
+        };
+        window.GroupSign = function (group_id,owner_id,medal){
+            $.ajax({
+                type: "get",
+                url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
+                data: {
+                    group_id: group_id,
+                    owner_id: owner_id
+                },
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    if(data.code===0){
+                        if(data.data.status===0){
+                            console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
+                        }else{
+                            console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
+                        }
+                    }else{
+                        console.error("ERROR",'GroupSign',data);
+                    }
+                }
+            });
         };
     });
     }
