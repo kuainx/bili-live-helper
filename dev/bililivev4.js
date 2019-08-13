@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili直播间自动领便当
 // @namespace    ekuai
-// @version      4.12
+// @version      4.13
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
@@ -143,10 +143,11 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             document.domain='bilibili.com';
             if(data.code===0){
                 var Grouplist=data.data.list;
+                var all = data.data.list.length;
                 Grouplist.forEach(function(val,index){
-                    var delay = (parseInt(Math.random()*5)+1)*1000;
+                    var delay = (parseInt(Math.random()*10)+1)*1000;
                     setTimeout(function(){
-                        window.parent.GroupSign(val.group_id,val.owner_uid,val.fans_medal_name);
+                        window.parent.GroupSign(val.group_id,val.owner_uid,val.fans_medal_name,(index+1)+"/"+all);
                     },delay*(index+1));
                 });
                 parent.localStorage.livejs_GroupSign=new Date().toLocaleDateString();
@@ -154,8 +155,11 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                 console.log("ERROR",'Grouplist',data);
             }
         };
-        var data =document.querySelector("pre").innerHTML;
-        GroupSignGet(JSON.parse(data));
+        var data = JSON.parse(document.querySelector("pre").innerHTML);
+        window.ls = function (){
+            window.GroupSignGet(data);
+        };
+        ls();
     }else{
      /***********新直播间************/
 (function($) {
@@ -803,7 +807,7 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
         window.recognize = function(ctx){
             return OCRAD(ctx);
         };
-        window.GroupSign = function (group_id,owner_id,medal){
+        window.GroupSign = function (group_id,owner_id,medal,ext){
             $.ajax({
                 type: "get",
                 url: "//api.live.bilibili.com/link_setting/v1/link_setting/sign_in",
@@ -819,9 +823,9 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                 success: function (data) {
                     if(data.code===0){
                         if(data.data.status===0){
-                            console.log('GroupSign',"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
+                            console.log('GroupSign',ext,"勋章【"+medal+"】签到成功，亲密度+"+data.data.add_num);
                         }else{
-                            console.log('GroupSign',"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+"status"+data.data.status);
+                            console.log('GroupSign',ext,"勋章【"+medal+"】签到失败，亲密度+"+data.data.add_num+",status:"+data.data.status);
                         }
                     }else{
                         console.error("ERROR",'GroupSign',data);
