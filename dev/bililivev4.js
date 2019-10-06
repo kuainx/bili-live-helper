@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili直播间自动领便当
 // @namespace    ekuai
-// @version      4.13
+// @version      4.14
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
@@ -722,7 +722,7 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             $("div.link-toast[data-id='"+id+"']").slideDown("normal",function(){setTimeout(function(){$("div.link-toast[data-id='"+id+"']").fadeOut("normal",function(){$("div.link-toast[data-id='"+id+"']").remove();});},time);});
         }
         function refreshSilver(val){
-            $("#gift-control-vm > div > div.vertical-middle.dp-table.section.right-part > div > div.supporting-info > div > div:nth-child(1) > div:nth-child(2) > span")[0].innerHTML=val;
+            document.querySelector(".item.seeds.pointer .svg-icon.silver-seed.v-middle").nextSibling.innerHTML=val;
         }
         function ticket(data){//对ajax数据进行判断
             $("iframe.helper_none").remove();
