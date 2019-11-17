@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili直播间自动领便当
 // @namespace    ekuai
-// @version      5.10
+// @version      5.20
 // @description  bilibili直播间自动领低保，妈妈再也不用担心我忘记领瓜子啦
 // @author       kuai
 // @include        /^https?:\/\/live\.bilibili\.com\/\d/
@@ -465,13 +465,24 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
             window.helper_id = getMiliSeconds();//脚本序列号
             window.localStorage.id =window.helper_id;
             setTimeout(function(){
+                let div = document.createElement("div");
+                div.className="p-relative gift-left-part";
+                div.setAttribute('data-v-78d5968f','');  
+                let btn = document.createElement("button");
+                btn.onclick=window.silver2coin;
+                btn.innerHTML="Silver2Coin";
+                div.appendChild(btn);
+                let box = document.querySelector(".treasure-box");
+                box.parentNode.insertBefore(div,box);
+            },3000);
+            setTimeout(function(){
                  if(isExist()){
                     msg("自动领瓜子已启动");
                     start();
                 }else{
                     msg("没有瓜子哦","caution");
                 }
-            },10000);//10秒
+            },15000);//10秒
             var date=new Date().toLocaleDateString();
             if(localStorage.livejs_Sign!=date){
                 setTimeout(function(){
@@ -838,6 +849,25 @@ if((window.location.href+"").indexOf("getCaptcha")>10){
                         }
                     }else{
                         console.error("ERROR",'GroupSign',data);
+                    }
+                }
+            });
+        };
+        window.silver2coin = function(){
+            $.ajax({
+                type: "get",
+                url: "//api.live.bilibili.com/pay/v1/Exchange/silver2coin",
+                datatype: "jsonp",//"xml", "html", "script", "json", "json", "text".
+                crossDomain:true,
+                xhrFields: {
+                    withCredentials: true
+                },
+                success: function (data) {
+                    if(data.code===0){
+                        console.log('silver2coin',data);
+                    }else{
+                        console.error("ERROR",'silver2coin',data);
+                        msg(data.msg);
                     }
                 }
             });
