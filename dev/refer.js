@@ -1,19 +1,16 @@
 // ==UserScript==
 // @name         Bilibili直播间挂机助手
 // @namespace    SeaLoong
-// @version      2.4.1
+// @version      2.4.10
 // @description  Bilibili直播间自动签到，领瓜子，参加抽奖，完成任务，送礼等
 // @author       SeaLoong
 // @homepageURL  https://github.com/SeaLoong/Bilibili-LRHH
 // @supportURL   https://github.com/SeaLoong/Bilibili-LRHH/issues
-// @updateURL    https://raw.githubusercontent.com/SeaLoong/Bilibili-LRHH/master/Bilibili%E7%9B%B4%E6%92%AD%E9%97%B4%E6%8C%82%E6%9C%BA%E5%8A%A9%E6%89%8B.user.js
-// @downloadURL  https://raw.githubusercontent.com/SeaLoong/Bilibili-LRHH/master/Bilibili%E7%9B%B4%E6%92%AD%E9%97%B4%E6%8C%82%E6%9C%BA%E5%8A%A9%E6%89%8B.user.js
-// @include      /https?:\/\/live\.bilibili\.com\/\d+\??.*/
-// @include      /https?:\/\/live\.bilibili\.com\/blanc\d+\??.*/
-// @include      /https?:\/\/api\.live\.bilibili\.com\/_.*/
+// @include      /^https?:\/\/live\.bilibili\.com\/[^?]*?\d+\??[^?]*$/
+// @include      /^https?:\/\/api\.live\.bilibili\.com\/_.*$/
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
-// @require      https://js-1258131272.file.myqcloud.com/BilibiliAPI.js
-// @require      https://js-1258131272.file.myqcloud.com/OCRAD.min.js
+// @require      https://greasyfork.org/scripts/38140-bilibiliapi/code/BilibiliAPI.js
+// @require      https://greasyfork.org/scripts/44866-ocrad/code/OCRAD.js
 // @grant        none
 // @run-at       document-start
 // @license      MIT License
@@ -41,7 +38,7 @@
     'use strict';
 
     const NAME = 'BLRHH';
-    const VERSION = '2.4.1';
+    const VERSION = '2.4.10';
     document.domain = 'bilibili.com';
 
     let API;
@@ -53,7 +50,7 @@
         return;
     }
 
-    const isSubScript = () => window.frameElement && window.parent[NAME];
+    const isSubScript = () => window.frameElement && window.parent[NAME] && window.frameElement[NAME];
 
     const DEBUGMODE = false || window.top.localStorage.getItem('BLRHH-DEBUG');
     const DEBUG = (sign, ...data) => {
@@ -89,13 +86,13 @@
 
     const ts_ms = () => Date.now();
 
-    const tryAgain = (callback) => {
+    const delayCall = (callback, delay = 10e3) => {
         const p = $.Deferred();
         setTimeout(() => {
             const t = callback();
             if (t && t.then) t.then((arg1, arg2, arg3, arg4, arg5, arg6) => p.resolve(arg1, arg2, arg3, arg4, arg5, arg6));
             else p.resolve();
-        }, 10e3);
+        }, delay);
         return p;
     };
 
@@ -121,12 +118,12 @@
 
     if (isSubScript()) {
         try {
-            let server_host = '';
+            let host_server_list = [];
             try {
                 // 拦截弹幕服务器连接
                 const webSocketConstructor = WebSocket.prototype.constructor;
                 WebSocket.prototype.constructor = (url, protocols) => {
-                    if (url === `wss://${server_host}/sub`) return webSocketConstructor(url, protocols);
+                    if (host_server_list.some(v => url.indexOf(v) > -1)) return webSocketConstructor(url, protocols);
                     throw new Error();
                 };
             } catch (err) {};
@@ -164,6 +161,18 @@
             window.frameElement[NAME].promise.init.resolve();
             // 正式执行子脚本
             if (window.frameElement[NAME].type === 'LOTTERY') {
+                let timer_next;
+                const finish = () => {
+                    if (timer_next) clearTimeout(timer_next);
+                    if (Lottery.ws.readyState === WebSocket.OPEN) Lottery.ws.close();
+                    Lottery.ws = undefined;
+                    window.frameElement[NAME].promise.finish.resolve();
+                };
+                const readyFinish = (t = 9e3) => {
+                    if (timer_next) clearTimeout(timer_next);
+                    if (t < 9e3) t = 9e3;
+                    timer_next = setTimeout(finish, t);
+                };
                 const Lottery = {
                     ws: undefined,
                     raffleIdSet: new Set(),
@@ -202,7 +211,7 @@
                                             }
                                         }, () => {
                                             window.toast(`[自动抽奖][礼物抽奖]检查直播间(${roomid})失败，请检查网络`, 'error');
-                                            return tryAgain(() => Lottery.Gift.run(roomid));
+                                            return delayCall(() => Lottery.Gift.run(roomid));
                                         });
                                     }
                                 });
@@ -217,12 +226,12 @@
                             if (i >= raffleList.length) return $.Deferred().resolve();
                             const obj = raffleList[i];
                             if (obj.status === 1) { // 可以参加
-                                return Lottery.Gift._join(roomid, obj.raffleId).then(() => Lottery.Gift.join(roomid, raffleList, i + 1));
+                                return Lottery.Gift._join(roomid, obj.raffleId, obj.type, obj.time_wait).then(() => Lottery.Gift.join(roomid, raffleList, i + 1));
                             } else if (obj.status === 2 && obj.time > 0) { // 已参加且未开奖
                             }
                             return Lottery.Gift.join(roomid, raffleList, i + 1);
                         },
-                        _join: (roomid, raffleId) => {
+                        _join: (roomid, raffleId, type, time_wait = 0) => {
                             if (Info.blocked) return $.Deferred().resolve();
                             roomid = parseInt(roomid, 10);
                             raffleId = parseInt(raffleId, 10);
@@ -230,22 +239,12 @@
                             // raffleId过滤，防止重复参加
                             if (Lottery.raffleIdSet.has(raffleId)) return $.Deferred().resolve();
                             Lottery.raffleIdSet.add(raffleId); // 加入raffleId记录列表
-                            return API.Lottery.Gift.join(roomid, raffleId).then((response) => {
+                            readyFinish(time_wait * 1e3 + 9e3);
+                            return delayCall(() => API.Lottery.Gift.join(roomid, raffleId, type).then((response) => {
                                 DEBUG('Lottery.Gift._join: API.Lottery.Gift.join', response);
                                 switch (response.code) {
                                     case 0:
-                                        window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},raffleId=${raffleId})`, 'success');
-                                        break;
-                                    case 400:
-                                        if (response.msg.indexOf('拒绝') > -1) {
-                                            Info.blocked = true;
-                                            up();
-                                            window.toast('[自动抽奖][礼物抽奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
-                                        } else if (response.msg.indexOf('快') > -1) {
-                                            return tryAgain(() => Lottery.Gift._join(roomid, raffleId));
-                                        } else {
-                                            window.toast(`[自动抽奖][礼物抽奖](roomid=${roomid},raffleId=${raffleId})${response.msg}`, 'caution');
-                                        }
+                                        window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})`, 'success');
                                         break;
                                     case 402:
                                         // 抽奖已过期，下次再来吧
@@ -254,31 +253,39 @@
                                         // 65531: 非当前直播间或短ID直播间试图参加抽奖
                                         Info.blocked = true;
                                         up();
-                                        window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})失败，已停止`, 'error');
+                                        window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},id=${raffleId},type=${type})失败，已停止`, 'error');
                                         break;
                                     default:
-                                        window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})${response.msg}`, 'caution');
+                                        if (response.msg.indexOf('拒绝') > -1) {
+                                            Info.blocked = true;
+                                            up();
+                                            window.toast('[自动抽奖][礼物抽奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
+                                        } else if (response.msg.indexOf('快') > -1) {
+                                            return delayCall(() => Lottery.Gift._join(roomid, raffleId));
+                                        } else {
+                                            window.toast(`[自动抽奖][礼物抽奖](roomid=${roomid},id=${raffleId},type=${type})${response.msg}`, 'caution');
+                                        }
                                 }
                             }, () => {
-                                window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})失败，请检查网络`, 'error');
-                                return tryAgain(() => Lottery.Gift._join(roomid, raffleId));
-                            });
+                                window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},id=${raffleId},type=${type})失败，请检查网络`, 'error');
+                                return delayCall(() => Lottery.Gift._join(roomid, raffleId));
+                            }), time_wait * 1e3 + 5e3);
                         }
                     },
                     Guard: {
                         run: (roomid) => {
                             try {
                                 if (!CONFIG.AUTO_LOTTERY_CONFIG.GUARD_AWARD || Info.blocked) return $.Deferred().resolve();
-                                return API.Lottery.Guard.check(roomid).then((response) => {
-                                    DEBUG('Lottery.Guard.run: API.Lottery.Guard.check', response);
+                                return API.xlive.lottery.check(roomid).then((response) => {
+                                    DEBUG('Lottery.Guard.run: API.xlive.lottery.check', response);
                                     if (response.code === 0) {
-                                        return Lottery.Guard.join(roomid, response.data);
+                                        return Lottery.Guard.join(roomid, response.data.guard);
                                     } else {
                                         window.toast(`[自动抽奖][舰队领奖](roomid=${roomid})${response.msg}`, 'caution');
                                     }
                                 }, () => {
                                     window.toast(`[自动抽奖][舰队领奖]检查直播间(${roomid})失败，请检查网络`, 'error');
-                                    return tryAgain(() => Lottery.Guard.run(roomid));
+                                    return delayCall(() => Lottery.Guard.run(roomid));
                                 });
                             } catch (err) {
                                 window.toast('[自动抽奖][舰队领奖]运行时出现异常', 'error');
@@ -307,44 +314,28 @@
                                 DEBUG('Lottery.Guard._join: API.Lottery.Guard.join', response);
                                 if (response.code === 0) {
                                     window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功`, 'success');
-                                    window.toast(`[自动抽奖][舰队领奖]${response.data.message}`, 'success');
-                                } else if (response.code === 400) {
-                                    if (response.msg.indexOf('拒绝') > -1) {
-                                        Info.blocked = true;
-                                        up();
-                                        window.toast('[自动抽奖][舰队领奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
-                                    } else if (response.msg.indexOf('快') > -1) {
-                                        return tryAgain(() => Lottery.Guard._join(roomid, id));
-                                    } else {
-                                        window.toast(`[自动抽奖][舰队领奖](roomid=${roomid},id=${id})${response.msg}`, 'caution');
-                                    }
+                                } else if (response.msg.indexOf('拒绝') > -1) {
+                                    Info.blocked = true;
+                                    up();
+                                    window.toast('[自动抽奖][舰队领奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
+                                } else if (response.msg.indexOf('快') > -1) {
+                                    return delayCall(() => Lottery.Guard._join(roomid, id));
+                                } else if (response.msg.indexOf('过期') > -1) {
                                 } else {
                                     window.toast(`[自动抽奖][舰队领奖](roomid=${roomid},id=${id})${response.msg}`, 'caution');
                                 }
                             }, () => {
                                 window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})失败，请检查网络`, 'error');
-                                return tryAgain(() => Lottery.Guard._join(roomid, id));
+                                return delayCall(() => Lottery.Guard._join(roomid, id));
                             });
                         }
                     }
                 };
-                let timer_next;
-                const finish = () => {
-                    if (timer_next) clearTimeout(timer_next);
-                    if (Lottery.ws.readyState === WebSocket.OPEN) Lottery.ws.close();
-                    Lottery.ws = undefined;
-                    window.frameElement[NAME].promise.finish.resolve();
-                };
-                const readyFinish = () => {
-                    if (timer_next) clearTimeout(timer_next);
-                    timer_next = setTimeout(finish, 9e3);
-                };
                 const listen = () => {
                     return API.room.getConf(window.frameElement[NAME].roomid).then((response) => {
                         DEBUG('listen: API.room.getConf', response);
-                        server_host = 'broadcastlv.chat.bilibili.com';
-                        if (response.data.host_server_list.length > 1) server_host = response.data.host_server_list[Math.round(Math.random() * 100) % (response.data.host_server_list.length - 1)].host;
-                        Lottery.ws = new API.DanmuWebSocket(Info.uid, window.frameElement[NAME].roomid, `wss://${server_host}/sub`);
+                        host_server_list = response.data.host_server_list;
+                        Lottery.ws = new API.DanmuWebSocket(Info.uid, window.frameElement[NAME].roomid, host_server_list, response.data.token);
                         Lottery.ws.bind((ws) => {
                             Lottery.ws = ws;
                         }, () => {
@@ -368,7 +359,7 @@
                                 case 'RAFFLE_START':
                                 case 'TV_START':
                                     if (CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY) {
-                                        if (obj.data.msg.real_roomid === window.frameElement[NAME].roomid && obj.data.raffleId) Lottery.Gift._join(window.frameElement[NAME].roomid, obj.data.raffleId);
+                                        if (obj.data.msg.real_roomid === window.frameElement[NAME].roomid && obj.data.raffleId) Lottery.Gift._join(window.frameElement[NAME].roomid, obj.data.raffleId, obj.data.type, obj.data.time_wait);
                                     }
                                     break;
                                 case 'SPECIAL_GIFT':
@@ -386,7 +377,7 @@
                             }
                             readyFinish();
                         });
-                    }, () => tryAgain(() => listen()));
+                    }, () => delayCall(() => listen()));
                 };
                 listen();
             } else if (window.frameElement[NAME].type === 'GROUPSIGN|DAILYREWARD') {
@@ -399,7 +390,7 @@
                             return $.Deferred().reject();
                         }, () => {
                             window.toast('[自动应援团签到]获取应援团列表失败，请检查网络', 'error');
-                            return tryAgain(() => GroupSign.getGroups());
+                            return delayCall(() => GroupSign.getGroups());
                         });
                     },
                     signInList: (list, i = 0) => {
@@ -424,7 +415,7 @@
                             return $.when(GroupSign.signInList(list, i + 1), p);
                         }, () => {
                             window.toast(`[自动应援团签到]应援团(group_id=${obj.group_id},owner_uid=${obj.owner_uid})签到失败，请检查网络`, 'error');
-                            return tryAgain(() => GroupSign.signInList(list, i));
+                            return delayCall(() => GroupSign.signInList(list, i));
                         });
                     },
                     run: () => {
@@ -440,8 +431,8 @@
                                     CACHE.group_sign_ts = ts_ms();
                                     up();
                                     runTomorrow(GroupSign.run);
-                                }, () => tryAgain(() => GroupSign.run()));
-                            }, () => tryAgain(() => GroupSign.run()));
+                                }, () => delayCall(() => GroupSign.run()));
+                            }, () => delayCall(() => GroupSign.run()));
                         } catch (err) {
                             window.toast('[自动应援团签到]运行时出现异常，已停止', 'error');
                             console.error(`[${NAME}]`, err);
@@ -457,7 +448,7 @@
                             window.toast('[自动每日奖励][每日登录]完成', 'success');
                         }, () => {
                             window.toast('[自动每日奖励][每日登录]完成失败，请检查网络', 'error');
-                            return tryAgain(() => DailyReward.login());
+                            return delayCall(() => DailyReward.login());
                         });
                     },
                     watch: (aid, cid) => {
@@ -471,7 +462,7 @@
                             }
                         }, () => {
                             window.toast('[自动每日奖励][每日观看]完成失败，请检查网络', 'error');
-                            return tryAgain(() => DailyReward.watch(aid, cid));
+                            return delayCall(() => DailyReward.watch(aid, cid));
                         });
                     },
                     coin: (cards, n, i = 0, one = false) => {
@@ -506,7 +497,7 @@
                             }
                             window.toast(`[自动每日奖励][每日投币]'${response.msg}`, 'caution');
                             return DailyReward.coin(cards, n, i + 1);
-                        }, () => tryAgain(() => DailyReward.coin(cards, n, i)));
+                        }, () => delayCall(() => DailyReward.coin(cards, n, i)));
                     },
                     share: (aid) => {
                         if (!CONFIG.AUTO_DAILYREWARD_CONFIG.SHARE) return $.Deferred().resolve();
@@ -522,7 +513,7 @@
                             }
                         }, () => {
                             window.toast('[自动每日奖励][每日分享]分享失败，请检查网络', 'error');
-                            return tryAgain(() => DailyReward.share(aid));
+                            return delayCall(() => DailyReward.share(aid));
                         });
                     },
                     dynamic: () => {
@@ -543,7 +534,7 @@
                             }
                         }, () => {
                             window.toast('[自动每日奖励]获取"动态-投稿视频"失败，请检查网络', 'error');
-                            return tryAgain(() => DailyReward.dynamic());
+                            return delayCall(() => DailyReward.dynamic());
                         });
                     },
                     run: () => {
@@ -569,7 +560,7 @@
                                 }
                             }, () => {
                                 window.toast('[自动每日奖励]获取每日奖励信息失败，请检查网络', 'error');
-                                return tryAgain(() => DailyReward.run());
+                                return delayCall(() => DailyReward.run());
                             });
                         } catch (err) {
                             window.toast('[自动每日奖励]运行时出现异常', 'error');
@@ -1177,7 +1168,7 @@
                             window.toast(`[自动签到]${response.data.text}`, 'success');
                             CACHE.sign_ts = ts_ms();
                             Essential.Cache.save();
-                        } else if (response.code === -500) {
+                        } else if (response.code === -500 || response.msg.indexOf('已签到') > -1) {
                             // 今天已签到过
                         } else {
                             window.toast(`[自动签到]${response.data.text}`, 'caution');
@@ -1186,7 +1177,7 @@
                         runTomorrow(Sign.run);
                     }, () => {
                         window.toast('[自动签到]签到失败，请检查网络', 'error');
-                        return tryAgain(() => Sign.run());
+                        return delayCall(() => Sign.run());
                     });
                 } catch (err) {
                     window.toast('[自动签到]运行时出现异常，已停止', 'error');
@@ -1209,7 +1200,7 @@
                         CACHE.exchange_ts = ts_ms();
                         Essential.Cache.save();
                         runTomorrow(Exchange.run);
-                    }, () => tryAgain(() => Exchange.run()));
+                    }, () => delayCall(() => Exchange.run()));
                 } catch (err) {
                     window.toast('[银瓜子换硬币]运行时出现异常，已停止', 'error');
                     console.error(`[${NAME}]`, err);
@@ -1231,7 +1222,7 @@
                     }
                 }, () => {
                     window.toast('[银瓜子换硬币]兑换失败，请检查网络', 'error');
-                    return tryAgain(() => Exchange.silver2coin());
+                    return delayCall(() => Exchange.silver2coin());
                 });
             }
         }; // Once Run every day
@@ -1270,7 +1261,7 @@
                         CACHE.task_ts = ts_ms();
                         Essential.Cache.save();
                         Task.run_timer = setTimeout(Task.run, Task.interval);
-                    }, () => tryAgain(() => Task.run()));
+                    }, () => delayCall(() => Task.run()));
                 } catch (err) {
                     window.toast('[自动完成任务]运行时出现异常，已停止', 'error');
                     console.error(`[${NAME}]`, err);
@@ -1292,7 +1283,7 @@
                     }
                 }, () => {
                     window.toast('[自动完成任务]完成任务失败，请检查网络', 'error');
-                    return tryAgain(() => Task.receiveAward(task_id));
+                    return delayCall(() => Task.receiveAward(task_id));
                 });
             }
         }; // Once Run every 10 minutes
@@ -1314,7 +1305,7 @@
                     if (response.data.pageinfo.curPage < response.data.pageinfo.totalpages) return Gift.getMedalList(page + 1);
                 }, () => {
                     window.toast('[自动送礼]获取勋章列表失败，请检查网络', 'error');
-                    return tryAgain(() => Gift.getMedalList(page));
+                    return delayCall(() => Gift.getMedalList(page));
                 });
             },
             getBagList: () => {
@@ -1324,7 +1315,7 @@
                     Gift.time = response.data.time;
                 }, () => {
                     window.toast('[自动送礼]获取包裹列表失败，请检查网络', 'error');
-                    return tryAgain(() => Gift.getBagList());
+                    return delayCall(() => Gift.getBagList());
                 });
             },
             getFeedByGiftID: (gift_id) => {
@@ -1348,7 +1339,7 @@
                     }
                     const func = () => {
                         window.toast('[自动送礼]送礼失败，请检查网络', 'error');
-                        return tryAgain(() => Gift.run());
+                        return delayCall(() => Gift.run());
                     };
                     return API.room.room_init(CONFIG.AUTO_GIFT_CONFIG.ROOMID).then((response) => {
                         DEBUG('Gift.run: API.room.room_init', response);
@@ -1417,7 +1408,7 @@
                                 return Gift.sendGift(i + 1);
                             }, () => {
                                 window.toast('[自动送礼]包裹送礼失败，请检查网络', 'error');
-                                return tryAgain(() => Gift.sendGift(i));
+                                return delayCall(() => Gift.sendGift(i));
                             });
                         }
                     }
@@ -1439,7 +1430,7 @@
                     return API.HeartBeat.mobile().then(() => {
                         DEBUG('MobileHeartbeat.run: API.HeartBeat.mobile');
                         MobileHeartbeat.run_timer = setTimeout(MobileHeartbeat.run, 300e3);
-                    }, () => tryAgain(() => MobileHeartbeat.run()));
+                    }, () => delayCall(() => MobileHeartbeat.run()));
                 } catch (err) {
                     window.toast('[移动端心跳]运行时出现异常，已停止', 'error');
                     console.error(`[${NAME}]`, err);
@@ -1658,7 +1649,7 @@
                     }
                 }, () => {
                     window.toast('[自动领取瓜子]获取任务失败，请检查网络', 'error');
-                    return tryAgain(() => TreasureBox.getAward(captcha, cnt));
+                    return delayCall(() => TreasureBox.getAward(captcha, cnt));
                 });
             },
             getCurrentTask: () => {
@@ -1668,7 +1659,7 @@
                     return $.Deferred().resolve(response);
                 }, () => {
                     window.toast('[自动领取瓜子]获取当前任务失败，请检查网络', 'error');
-                    return tryAgain(() => TreasureBox.getCurrentTask());
+                    return delayCall(() => TreasureBox.getCurrentTask());
                 });
             },
             captcha: {
@@ -1704,11 +1695,11 @@
                             return p;
                         } else {
                             window.toast(`[自动领取瓜子]${response.msg}`, 'caution');
-                            return tryAgain(() => TreasureBox.captcha.calc());
+                            return delayCall(() => TreasureBox.captcha.calc());
                         }
                     }, () => {
                         window.toast('[自动领取瓜子]加载验证码失败，请检查网络', 'error');
-                        return tryAgain(() => TreasureBox.captcha.calc());
+                        return delayCall(() => TreasureBox.captcha.calc());
                     });
                 },
                 // 对B站验证码进行处理
@@ -1825,81 +1816,18 @@
             hasWS: false,
             createCount: 0,
             roomidSet: new Set(),
+            listenSet: new Set(),
             Gift: {
-                fishingCheck: (roomid) => {
-                    const p = $.Deferred();
-                    API.room.room_init(roomid).then((response) => {
-                        DEBUG('Lottery.Gift.fishingCheck: API.room.room_init', response);
-                        if (response.code === 0) {
-                            if (response.data.is_hidden || response.data.is_locked || response.data.encrypted || response.data.pwd_verified) return p.resolve(true);
-                            return p.resolve(false);
-                        }
-                        p.reject();
-                    }, () => {
-                        p.reject();
-                    }).always(() => {
-                        API.room.room_entry_action(roomid);
-                    });
-                    return p;
-                },
-                run: (roomid) => {
-                    // 全部参加完成返回resolve，任意一个失败返回reject
-                    try {
-                        if (!CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY || Info.blocked) return $.Deferred().resolve();
-                        return Lottery.Gift.fishingCheck(roomid).then((fishing) => {
-                            if (!fishing) {
-                                return API.Lottery.Gift.check(roomid).then((response) => {
-                                    DEBUG('Lottery.Gift.run: API.Lottery.Gift.check', response);
-                                    if (response.code === 0) {
-                                        if (response.data.list) return Lottery.Gift.join(roomid, response.data.list);
-                                    } else if (response.code === -400) {
-                                        // 没有需要提示的小电视
-                                    } else {
-                                        window.toast(`[自动抽奖][礼物抽奖]${response.msg}`, 'caution');
-                                    }
-                                }, () => {
-                                    window.toast(`[自动抽奖][礼物抽奖]检查直播间(${roomid})失败，请检查网络`, 'error');
-                                    return tryAgain(() => Lottery.Gift.run(roomid));
-                                });
-                            }
-                        });
-                    } catch (err) {
-                        window.toast('[自动抽奖][礼物抽奖]运行时出现异常', 'error');
-                        console.error(`[${NAME}]`, err);
-                        return $.Deferred().reject();
-                    }
-                },
-                join: (roomid, raffleList, i = 0) => {
-                    if (Info.blocked) return $.Deferred().resolve();
-                    if (i >= raffleList.length) return $.Deferred().resolve();
-                    const obj = raffleList[i];
-                    if (obj.status === 1) { // 可以参加
-                        return Lottery.Gift._join(roomid, obj.raffleId).then(() => Lottery.Gift.join(roomid, raffleList, i + 1));
-                    } else if (obj.status === 2 && obj.time > 0) { // 已参加且未开奖
-                    }
-                    return Lottery.Gift.join(roomid, raffleList, i + 1);
-                },
-                _join: (roomid, raffleId) => {
+                _join: (roomid, raffleId, type, time_wait = 0) => {
                     if (Info.blocked) return $.Deferred().resolve();
                     roomid = parseInt(roomid, 10);
                     raffleId = parseInt(raffleId, 10);
                     if (isNaN(roomid) || isNaN(raffleId)) return $.Deferred().reject();
-                    return API.Lottery.Gift.join(roomid, raffleId).then((response) => {
+                    return delayCall(() => API.Lottery.Gift.join(roomid, raffleId, type).then((response) => {
                         DEBUG('Lottery.Gift._join: API.Lottery.Gift.join', response);
                         switch (response.code) {
                             case 0:
-                                window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},raffleId=${raffleId})`, 'success');
-                                break;
-                            case 400:
-                                if (response.msg.indexOf('拒绝') > -1) {
-                                    Info.blocked = true;
-                                    Essential.DataSync.down();
-                                    window.toast('[自动抽奖][礼物抽奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
-                                } else if (response.msg.indexOf('快') > -1) {
-                                    return tryAgain(() => Lottery.Gift._join(roomid, raffleId));
-                                } else {
-                                    window.toast(`[自动抽奖][礼物抽奖](roomid=${roomid},raffleId=${raffleId})${response.msg}`, 'caution');
-                                }
+                                window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})`, 'success');
                                 break;
                             case 402:
                                 // 抽奖已过期，下次再来吧
@@ -1908,48 +1836,27 @@
                                 // 65531: 非当前直播间或短ID直播间试图参加抽奖
                                 Info.blocked = true;
                                 Essential.DataSync.down();
-                                window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})失败，已停止`, 'error');
+                                window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},id=${raffleId},type=${type})失败，已停止`, 'error');
                                 break;
                             default:
-                                window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})${response.msg}`, 'caution');
+                                if (response.msg.indexOf('拒绝') > -1) {
+                                    Info.blocked = true;
+                                    Essential.DataSync.down();
+                                    window.toast('[自动抽奖][礼物抽奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
+                                } else if (response.msg.indexOf('快') > -1) {
+                                    return delayCall(() => Lottery.Gift._join(roomid, raffleId));
+                                } else {
+                                    window.toast(`[自动抽奖][礼物抽奖](roomid=${roomid},id=${raffleId},type=${type})${response.msg}`, 'caution');
+                                }
                         }
                     }, () => {
-                        window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},raffleId=${raffleId})失败，请检查网络`, 'error');
-                        return tryAgain(() => Lottery.Gift._join(roomid, raffleId));
-                    });
+                        window.toast(`[自动抽奖][礼物抽奖]参加抽奖(roomid=${roomid},id=${raffleId},type=${type})失败，请检查网络`, 'error');
+                        return delayCall(() => Lottery.Gift._join(roomid, raffleId));
+                    }), time_wait * 1e3 + 5e3);
                 }
             },
             Guard: {
                 wsList: [],
-                run: (roomid) => {
-                    try {
-                        if (!CONFIG.AUTO_GIFT_CONFIG.GUARD_AWARD || Info.blocked) return $.Deferred().resolve();
-                        return API.Lottery.Guard.check(roomid).then((response) => {
-                            DEBUG('Lottery.Guard.run: API.Lottery.Guard.check', response);
-                            if (response.code === 0) {
-                                return Lottery.Guard.join(roomid, response.data);
-                            } else {
-                                window.toast(`[自动抽奖][舰队领奖](roomid=${roomid})${response.msg}`, 'caution');
-                            }
-                        }, () => {
-                            window.toast(`[自动抽奖][舰队领奖]检查直播间(${roomid})失败，请检查网络`, 'error');
-                            return tryAgain(() => Lottery.Guard.run(roomid));
-                        });
-                    } catch (err) {
-                        window.toast('[自动抽奖][舰队领奖]运行时出现异常', 'error');
-                        console.error(`[${NAME}]`, err);
-                        return $.Deferred().reject();
-                    }
-                },
-                join: (roomid, guard, i = 0) => {
-                    if (Info.blocked) return $.Deferred().resolve();
-                    if (i >= guard.length) return $.Deferred().resolve();
-                    const obj = guard[i];
-                    if (obj.status === 1) {
-                        return Lottery.Guard._join(roomid, obj.id).then(() => Lottery.Guard.join(roomid, guard, i + 1));
-                    }
-                    return Lottery.Guard.join(roomid, guard, i + 1);
-                },
                 _join: (roomid, id) => {
                     if (Info.blocked) return $.Deferred().resolve();
                     roomid = parseInt(roomid, 10);
@@ -1959,23 +1866,19 @@
                         DEBUG('Lottery.Guard._join: API.Lottery.Guard.join', response);
                         if (response.code === 0) {
                             window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功`, 'success');
-                            window.toast(`[自动抽奖][舰队领奖]${response.data.message}`, 'success');
-                        } else if (response.code === 400) {
-                            if (response.msg.indexOf('拒绝') > -1) {
-                                Info.blocked = true;
-                                Essential.DataSync.down();
-                                window.toast('[自动抽奖][舰队领奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
-                            } else if (response.msg.indexOf('快') > -1) {
-                                return tryAgain(() => Lottery.Guard._join(roomid, id));
-                            } else {
-                                window.toast(`[自动抽奖][舰队领奖](roomid=${roomid},id=${id})${response.msg}`, 'caution');
-                            }
+                        } else if (response.msg.indexOf('拒绝') > -1) {
+                            Info.blocked = true;
+                            Essential.DataSync.down();
+                            window.toast('[自动抽奖][舰队领奖]访问被拒绝，您的帐号可能已经被关小黑屋，已停止', 'error');
+                        } else if (response.msg.indexOf('快') > -1) {
+                            return delayCall(() => Lottery.Guard._join(roomid, id));
+                        } else if (response.msg.indexOf('过期') > -1) {
                         } else {
                             window.toast(`[自动抽奖][舰队领奖](roomid=${roomid},id=${id})${response.msg}`, 'caution');
                         }
                     }, () => {
                         window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})失败，请检查网络`, 'error');
-                        return tryAgain(() => Lottery.Guard._join(roomid, id));
+                        return delayCall(() => Lottery.Guard._join(roomid, id));
                     });
                 }
             },
@@ -1999,14 +1902,14 @@
                                 Essential.Cache.save();
                             }
                             setTimeout(Lottery.MaterialObject.run, CONFIG.AUTO_LOTTERY_CONFIG.MATERIAL_OBJECT_LOTTERY_CONFIG.CHECK_INTERVAL * 60e3 || 600e3);
-                        }, () => tryAgain(() => Lottery.MaterialObject.run()));
+                        }, () => delayCall(() => Lottery.MaterialObject.run()));
                     } catch (err) {
                         window.toast('[自动抽奖][实物抽奖]运行时出现异常', 'error');
                         console.error(`[${NAME}]`, err);
                         return $.Deferred().reject();
                     }
                 },
-                check: (aid, valid = 380, rem = 9) => { // TODO
+                check: (aid, valid = 436, rem = 9) => { // TODO
                     aid = parseInt(aid || (CACHE.last_aid), 10);
                     if (isNaN(aid)) aid = valid;
                     DEBUG('Lottery.MaterialObject.check: aid=', aid);
@@ -2027,7 +1930,7 @@
                         }
                     }, () => {
                         window.toast(`[自动抽奖][实物抽奖]检查抽奖(aid=${aid})失败，请检查网络`, 'error');
-                        return tryAgain(() => Lottery.MaterialObject.check(aid, valid));
+                        return delayCall(() => Lottery.MaterialObject.check(aid, valid));
                     });
                 },
                 join: (aid, title, typeB, i = 0) => {
@@ -2097,7 +2000,7 @@
                         }
                     }, () => {
                         window.toast(`[自动抽奖][实物抽奖]参加"${obj.title}"(aid=${obj.aid},number=${obj.number})失败，请检查网络`, 'error');
-                        return tryAgain(() => Lottery.MaterialObject.draw(obj));
+                        return delayCall(() => Lottery.MaterialObject.draw(obj));
                     });
                 },
                 notice: (obj) => {
@@ -2122,13 +2025,14 @@
                         }
                     }, () => {
                         window.toast(`[自动抽奖][实物抽奖]获取抽奖"${obj.title}"(aid=${obj.aid},number=${obj.number})中奖名单失败，请检查网络`, 'error');
-                        return tryAgain(() => Lottery.MaterialObject.notice(obj));
+                        return delayCall(() => Lottery.MaterialObject.notice(obj));
                     });
                 }
             },
             create: (roomid, real_roomid, type, link_url) => {
-                if (Lottery.createCount > 50) location.reload();
+                if (Lottery.createCount > 99) location.reload();
                 if (!real_roomid) real_roomid = roomid;
+                if (Info.roomid === real_roomid) return;
                 // roomid过滤，防止创建多个同样roomid的iframe
                 if (Lottery.roomidSet.has(real_roomid)) return;
                 Lottery.roomidSet.add(real_roomid);
@@ -2173,12 +2077,12 @@
                 DEBUG('Lottery.create: iframe', iframe);
             },
             listen: (uid, roomid, area = '', gift = false, volatile = true) => {
+                if (Lottery.listenSet.has(roomid)) return;
+                Lottery.listenSet.add(roomid);
                 return API.room.getConf(roomid).then((response) => {
                     DEBUG('Lottery.listen: API.room.getConf', response);
                     if (Info.blocked) return;
-                    let server_host = 'broadcastlv.chat.bilibili.com';
-                    if (response.data.host_server_list.length > 1) server_host = response.data.host_server_list[Math.round(Math.random() * 100) % (response.data.host_server_list.length - 1)].host;
-                    let ws = new API.DanmuWebSocket(uid, roomid, `wss://${server_host}/sub`);
+                    let ws = new API.DanmuWebSocket(uid, roomid, response.data.host_server_list, response.data.token);
                     let id = 0;
                     if (volatile) id = Lottery.Guard.wsList.push(ws);
                     ws.bind((newws) => {
@@ -2186,8 +2090,7 @@
                         window.toast(`[自动抽奖]${area}(${roomid})弹幕服务器连接断开，尝试重连`, 'caution');
                     }, () => {
                         window.toast(`[自动抽奖]${area}(${roomid})连接弹幕服务器成功`, 'success');
-                        if (CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY) Lottery.Gift.run(roomid);
-                        if (CONFIG.AUTO_LOTTERY_CONFIG.GUARD_AWARD) Lottery.Guard.run(roomid);
+                        if (CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY || CONFIG.AUTO_LOTTERY_CONFIG.GUARD_AWARD) Lottery.create(roomid, roomid, 'LOTTERY');
                     }, () => {
                         if (Info.blocked) {
                             ws.close();
@@ -2219,7 +2122,7 @@
                                             if (!CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY) break;
                                             if (Info.blocked || !obj.roomid || !obj.real_roomid) break;
                                             if (obj.real_roomid !== Info.roomid) {
-                                                Lottery.create(obj.roomid, obj.real_roomid, 'LOTTERY', obj.link_url);
+                                                delayCall(() => Lottery.create(obj.roomid, obj.real_roomid, 'LOTTERY', obj.link_url), 60e3);
                                             }
                                         }
                                         break;
@@ -2255,8 +2158,8 @@
                                 if (gift) {
                                     if (!CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY) break;
                                     if (Info.blocked || !obj.data.msg.roomid || !obj.data.msg.real_roomid || !obj.data.raffleId) break;
-                                    if (obj.data.msg.real_roomid === Info.roomid) Lottery.Gift._join(Info.roomid, obj.data.raffleId);
-                                    else Lottery.create(obj.data.msg.roomid, obj.data.msg.real_roomid, 'LOTTERY', obj.data.msg.url);
+                                    if (obj.data.msg.real_roomid === Info.roomid) Lottery.Gift._join(Info.roomid, obj.data.raffleId, obj.data.type, obj.data.time_wait);
+                                    else delayCall(() => Lottery.create(obj.data.msg.roomid, obj.data.msg.real_roomid, 'LOTTERY', obj.data.msg.url), obj.data.time_wait * 1e3);
                                 }
                                 break;
                             case 'SPECIAL_GIFT':
@@ -2277,7 +2180,7 @@
                                 break;
                         }
                     });
-                }, () => tryAgain(() => Lottery.listen(uid, roomid, area, volatile)));
+                }, () => delayCall(() => Lottery.listen(uid, roomid, area, volatile)));
             },
             listenAll: () => {
                 if (Info.blocked) return;
@@ -2287,13 +2190,15 @@
                 }
                 Lottery.Guard.wsList.forEach(v => v.close());
                 Lottery.Guard.wsList = [];
+                Lottery.listenSet = new Set();
+                Lottery.listenSet.add(Info.roomid);
                 const fn1 = () => {
                     return API.room.getList().then((response) => {
                         DEBUG('Lottery.listenAll: API.room.getList', response);
                         for (const obj of response.data) {
                             fn2(obj);
                         }
-                    }, () => tryAgain(() => fn1()));
+                    }, () => delayCall(() => fn1()));
                 };
                 const fn2 = (obj) => {
                     return API.room.getRoomList(obj.id, 0, 0, 1, CONFIG.AUTO_LOTTERY_CONFIG.GUARD_AWARD ? CONFIG.AUTO_LOTTERY_CONFIG.GUARD_AWARD_CONFIG.LISTEN_NUMBER : 1).then((response) => {
@@ -2301,7 +2206,7 @@
                         for (let j = 0; j < response.data.length; ++j) {
                             Lottery.listen(Info.uid, response.data[j].roomid, `[${obj.name}区]`, !j, true);
                         }
-                    }, () => tryAgain(() => fn2(obj)));
+                    }, () => delayCall(() => fn2(obj)));
                 };
                 fn1();
             },

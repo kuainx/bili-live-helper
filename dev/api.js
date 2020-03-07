@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BilibiliAPI
 // @namespace    SeaLoong
-// @version      1.4.3
+// @version      1.4.6
 // @description  BilibiliAPI，PC端抓包研究所得
 // @author       SeaLoong
 // @require      http://code.jquery.com/jquery-3.3.1.min.js
@@ -49,7 +49,11 @@ var BilibiliAPI = {
         },
         Guard: {
             check: (roomid) => BilibiliAPI.lottery.lottery.check_guard(roomid),
-            join: (roomid, id, type) => BilibiliAPI.lottery.lottery.join(roomid, id, type)
+            join: (roomid, id, type) => BilibiliAPI.xlive.guard.join(roomid, id, type)
+        },
+        Pk: {
+            check: (roomid) => BilibiliAPI.xlive.pk.check(roomid),
+            join: (roomid, id) => BilibiliAPI.xlive.pk.join(roomid, id)
         }
     },
     Group: {
@@ -976,6 +980,29 @@ var BilibiliAPI = {
         }
     },
     xlive: {
+        guard: {
+            join: (roomid, id, type = 'guard') => {
+                return BilibiliAPI.ajaxWithCommonArgs({
+                    method: 'POST',
+                    url: 'xlive/lottery-interface/v3/guard/join',
+                    data: {
+                        roomid: roomid,
+                        id: id,
+                        type: type
+                    }
+                });
+            }
+        },
+        lottery: {
+            check: (roomid) => {
+                return BilibiliAPI.ajax({
+                    url: 'xlive/lottery-interface/v1/lottery/Check',
+                    data: {
+                        roomid: roomid
+                    }
+                });
+            }
+        },
         smalltv: {
             check: (roomid) => {
                 return BilibiliAPI.ajax({
@@ -985,13 +1012,13 @@ var BilibiliAPI = {
                     }
                 });
             },
-            join: (roomid, raffleId, type = 'Gift') => {
+            join: (roomid, id, type = 'small_tv') => {
                 return BilibiliAPI.ajaxWithCommonArgs({
                     method: 'POST',
-                    url: 'xlive/lottery-interface/v3/smalltv/Join',
+                    url: 'xlive/lottery-interface/v5/smalltv/join',
                     data: {
                         roomid: roomid,
-                        raffleId: raffleId,
+                        id: id,
                         type: type
                     }
                 });
@@ -1002,6 +1029,26 @@ var BilibiliAPI = {
                     data: {
                         type: type,
                         raffleId: raffleId
+                    }
+                });
+            }
+        },
+        pk: {
+            check: (roomid) => {
+                return BilibiliAPI.ajax({
+                    url: 'xlive/lottery-interface/v1/pk/check',
+                    data: {
+                        roomid: roomid
+                    }
+                });
+            },
+            join: (roomid, id) => {
+                return BilibiliAPI.ajaxWithCommonArgs({
+                    method: 'POST',
+                    url: 'xlive/lottery-interface/v1/pk/join',
+                    data: {
+                        roomid: roomid,
+                        id: id
                     }
                 });
             }
@@ -1031,9 +1078,20 @@ var BilibiliAPI = {
         static uintToString(uintArray) {
             return decodeURIComponent(escape(String.fromCharCode.apply(null, uintArray)));
         }
-        constructor(uid, roomid, serveraddress = 'wss://broadcastlv.chat.bilibili.com/sub') {
+        constructor(uid, roomid, host_server_list, token) {
             // 总字节长度 int(4bytes) + 头字节长度(16=4+2+2+4+4) short(2bytes) + protover(1,2) short(2bytes) + operation int(4bytes) + sequence(1,0) int(4bytes) + Data
-            super(serveraddress);
+            let address = 'wss://broadcastlv.chat.bilibili.com/sub';
+            if (Array.isArray(host_server_list) && host_server_list.length > 0) {
+                let flag = false;
+                do {
+                    const chosen = host_server_list.shift();
+                    if (chosen.wss_port) address = `wss://${chosen.host}:${chosen.wss_port}/sub`;
+                    else flag = true;
+                } while (flag && host_server_list.length > 0);
+            } else if (typeof host_server_list === 'string' && host_server_list.length > 0) {
+                address = host_server_list;
+            }
+            super(address);
             this.binaryType = 'arraybuffer';
             this.handlers = {
                 reconnect: [],
@@ -1042,6 +1100,8 @@ var BilibiliAPI = {
                 cmd: [],
                 receive: []
             };
+            this.host_server_list = host_server_list;
+            this.token = token;
             this.closed = false;
             this.addEventListener('open', () => {
                 this.sendLoginPacket(uid, roomid).sendHeartBeatPacket();
@@ -1054,7 +1114,7 @@ var BilibiliAPI = {
                 if (this.closed) return;
                 // 自动重连
                 setTimeout(() => {
-                    const ws = new BilibiliAPI.DanmuWebSocket(uid, roomid, serveraddress);
+                    const ws = new BilibiliAPI.DanmuWebSocket(uid, roomid, this.host_server_list, this.token);
                     ws.handlers = this.handlers;
                     ws.unzip = this.unzip;
                     for (const key in this.handlers) {
@@ -1235,8 +1295,9 @@ var BilibiliAPI = {
                 'roomid': parseInt(roomid, 10),
                 'protover': 2,
                 'platform': 'web',
-                'clientver': '1.6.3',
-                'type': 2
+                'clientver': '1.8.5',
+                'type': 2,
+                'key': this.token
             };
             return this.sendData(data, 1, 7, 1);
         }
