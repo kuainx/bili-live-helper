@@ -9,8 +9,8 @@
 // @include      /^https?:\/\/live\.bilibili\.com\/[^?]*?\d+\??[^?]*$/
 // @include      /^https?:\/\/api\.live\.bilibili\.com\/_.*$/
 // @require      https://code.jquery.com/jquery-3.3.1.min.js
-// @require      https://greasyfork.org/scripts/38140-bilibiliapi/code/BilibiliAPI.js
-// @require      https://greasyfork.org/scripts/44866-ocrad/code/OCRAD.js
+// @require      https://js-1258131272.file.myqcloud.com/BilibiliAPI.js
+// @require      https://js-1258131272.file.myqcloud.com/OCRAD.min.js
 // @grant        none
 // @run-at       document-start
 // @license      MIT License
@@ -40,7 +40,20 @@
     const NAME = 'BLRHH';
     const VERSION = '2.4.10';
     document.domain = 'bilibili.com';
-
+    window.currentTime = function CurentTime() {
+        var now = new Date();
+        var hh = now.getHours(); //时
+        var mm = now.getMinutes(); //分
+        var ss = now.getSeconds(); //秒
+        var clock = '';
+        if (hh < 10) clock += "0";
+        clock += hh + ":";
+        if (mm < 10) clock += '0';
+        clock += mm + ":";
+        if (ss < 10) clock += '0';
+        clock += ss;
+        return (clock);
+    }
     let API;
     try {
         API = BilibiliAPI;
@@ -244,7 +257,7 @@
                                 DEBUG('Lottery.Gift._join: API.Lottery.Gift.join', response);
                                 switch (response.code) {
                                     case 0:
-                                        window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})`, 'success');
+                                        window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})，抽到${response.data.award_name}X${response.data.award_num}`, 'success');
                                         break;
                                     case 402:
                                         // 抽奖已过期，下次再来吧
@@ -313,7 +326,7 @@
                             return API.Lottery.Guard.join(roomid, id).then((response) => {
                                 DEBUG('Lottery.Guard._join: API.Lottery.Guard.join', response);
                                 if (response.code === 0) {
-                                    window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功`, 'success');
+                                    window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功，${response.data.award_text}`, 'success');
                                 } else if (response.msg.indexOf('拒绝') > -1) {
                                     Info.blocked = true;
                                     up();
@@ -614,17 +627,17 @@
                             switch (type) {
                                 case 'success':
                                 case 'info':
-                                    console.info(`[${NAME}][${d}]${msg}`);
+                                    console.info(`[${currentTime()}][${NAME}][${d}]${msg}`);
                                     break;
                                 case 'caution':
-                                    console.warn(`[${NAME}][${d}]${msg}`);
+                                    console.warn(`[${currentTime()}][${NAME}][${d}]${msg}`);
                                     break;
                                 case 'error':
-                                    console.error(`[${NAME}][${d}]${msg}`);
+                                    console.error(`[${currentTime()}][${NAME}][${d}]${msg}`);
                                     break;
                                 default:
                                     type = 'info';
-                                    console.log(`[${NAME}][${d}]${msg}`);
+                                    console.log(`[${currentTime()}][${NAME}][${d}]${msg}`);
                             }
                             if (CONFIG && !CONFIG.SHOW_TOAST) return;
                             const a = $(`<div class="link-toast ${type} fixed"><span class="toast-text">${msg}</span></div>`)[0];
@@ -703,8 +716,8 @@
                     AUTO_SIGN: true,
                     AUTO_TREASUREBOX: true,
                     AUTO_GROUP_SIGN: true,
-                    MOBILE_HEARTBEAT: true,
-                    AUTO_LOTTERY: false,
+                    MOBILE_HEARTBEAT: false,
+                    AUTO_LOTTERY: true,
                     AUTO_LOTTERY_CONFIG: {
                         GIFT_LOTTERY: true,
                         GIFT_LOTTERY_CONFIG: {
@@ -1632,8 +1645,8 @@
                                 TreasureBox.captcha.calc().then((captcha) => {
                                     TreasureBox.getAward(captcha, cnt + 1).then(() => p.resolve(), () => p.reject());
                                 }, () => p.reject());
-                            }, 3e3);
-                            return p;
+                            }, 3e4);
+                            return $.Deferred();
                         case 400: // 400: 访问被拒绝
                             if (response.msg.indexOf('拒绝') > -1) {
                                 Info.blocked = true;
@@ -1827,7 +1840,7 @@
                         DEBUG('Lottery.Gift._join: API.Lottery.Gift.join', response);
                         switch (response.code) {
                             case 0:
-                                window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})`, 'success');
+                                window.toast(`[自动抽奖][礼物抽奖]已参加抽奖(roomid=${roomid},id=${raffleId},type=${type})，抽到${response.data.award_name}X${response.data.award_num}`, 'success');
                                 break;
                             case 402:
                                 // 抽奖已过期，下次再来吧
@@ -1865,7 +1878,7 @@
                     return API.Lottery.Guard.join(roomid, id).then((response) => {
                         DEBUG('Lottery.Guard._join: API.Lottery.Guard.join', response);
                         if (response.code === 0) {
-                            window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功`, 'success');
+                            window.toast(`[自动抽奖][舰队领奖]领取(roomid=${roomid},id=${id})成功，${response.data.award_text}`, 'success');
                         } else if (response.msg.indexOf('拒绝') > -1) {
                             Info.blocked = true;
                             Essential.DataSync.down();
@@ -2121,6 +2134,9 @@
                                         if (gift) {
                                             if (!CONFIG.AUTO_LOTTERY_CONFIG.GIFT_LOTTERY) break;
                                             if (Info.blocked || !obj.roomid || !obj.real_roomid) break;
+                                            if (Math.random()<0.2){
+                                                window.toast(`战略性放过${obj.real_roomid}`)
+                                                break;}
                                             if (obj.real_roomid !== Info.roomid) {
                                                 delayCall(() => Lottery.create(obj.roomid, obj.real_roomid, 'LOTTERY', obj.link_url), 60e3);
                                             }
