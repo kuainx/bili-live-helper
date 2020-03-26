@@ -1536,8 +1536,8 @@
                                 const answer = TreasureBox.captcha.eval(question);
                                 DEBUG('TreasureBox.DOM.image.load', 'answer =', answer);
                                 if (answer !== undefined) {
-                                    // window.toast(`[自动领取瓜子]验证码识别结果: ${question} = ${answer}`, 'info');
-                                    console.info(`[${NAME}][自动领取瓜子]验证码识别结果: ${question} = ${answer}`);
+                                    window.toast(`[自动领取瓜子]验证码识别结果: ${question} = ${answer}`, 'info');
+                                    // console.info(`[${NAME}][自动领取瓜子]: ${question} = ${answer}`);
                                     TreasureBox.promise.calc.resolve(answer);
                                 }
                             } catch (err) {
@@ -1626,6 +1626,7 @@
                     DEBUG('TreasureBox.getAward: getAward', response);
                     switch (response.code) {
                         case 0:
+                            TreasureBox.getCurrentTask();
                             window.toast(`[自动领取瓜子]领取了 ${response.data.awardSilver} 银瓜子`, 'success');
                         case -903: // -903: 已经领取过这个宝箱
                             // window.toast('[自动领取瓜子]已经领取过这个宝箱', 'caution');
@@ -1640,13 +1641,14 @@
                             window.toast('[自动领取瓜子]未绑定手机，已停止', 'caution');
                             return $.Deferred().reject();
                         case -500: // -500：领取时间未到, 请稍后再试
+                            TreasureBox.getCurrentTask();
                             const p = $.Deferred();
                             setTimeout(() => {
                                 TreasureBox.captcha.calc().then((captcha) => {
                                     TreasureBox.getAward(captcha, cnt + 1).then(() => p.resolve(), () => p.reject());
                                 }, () => p.reject());
                             }, 3e4);
-                            return $.Deferred();
+                            return p;
                         case 400: // 400: 访问被拒绝
                             if (response.msg.indexOf('拒绝') > -1) {
                                 Info.blocked = true;
